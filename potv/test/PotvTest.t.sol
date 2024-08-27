@@ -26,6 +26,7 @@ contract PotvTest is Test {
     MockToken public collateral1;
     MockToken public collateral2;
     MockToken public rewardToken;
+    MockToken public rewardToken2;
 
     address public owner;
     address public user1;
@@ -68,6 +69,7 @@ contract PotvTest is Test {
         collateral1 = new MockToken();
         collateral2 = new MockToken();
         rewardToken = new MockToken();
+        rewardToken2 = new MockToken();
         collateral1.mint(user1, 1000000 ether);
         collateral1.mint(user2, 1000000 ether);
 
@@ -90,6 +92,7 @@ contract PotvTest is Test {
 
         //set reward token
         reward.addRewardToken(address(rewardToken));
+        reward.addRewardToken(address(rewardToken2));
 
         pool.setUsdAddress(address(usd));
         usd.setPool(address(pool));
@@ -300,40 +303,54 @@ contract PotvTest is Test {
         lend.supply(address(collateral1), 100 ether, address(0x3));
         
         // Prepare reward distribution parameters
-        address[] memory rewardTokens = new address[](1);
+        address[] memory rewardTokens = new address[](2);
         rewardTokens[0] = address(rewardToken);
+        rewardTokens[1] = address(rewardToken2);
         
         address[] memory lpTokens = new address[](1);
         lpTokens[0] = address(collateral1);
+
         
-        uint256[][] memory rewardAmounts = new uint256[][](1);
+        uint256[][] memory rewardAmounts = new uint256[][](2);
         rewardAmounts[0] = new uint256[](1);
         rewardAmounts[0][0] = 1000 ether; // 1000 tokens as reward
         
+        rewardAmounts[1] = new uint256[](1);
+        rewardAmounts[1][0] = 1000 ether; // 1000 tokens as reward
+
         assertEq(reward.claimableReward(user1, address(rewardToken)), 0);
         assertEq(reward.claimableReward(user2, address(rewardToken)), 0);
         
         // Distribute rewards
         vm.startPrank(owner);
         rewardToken.mint(owner, 1000 ether);
+        rewardToken2.mint(owner, 1000 ether);
         rewardToken.approve(address(reward), 1000 ether);
+        rewardToken2.approve(address(reward), 1000 ether);
         reward.distributeReward(rewardTokens, lpTokens, rewardAmounts);
-        assertEq(reward.claimableReward(user1, address(rewardToken)), 500 ether);
-        assertEq(reward.claimableReward(user2, address(rewardToken)), 500 ether); 
+        assertEq(reward.claimableReward(user1, address(rewardToken)), 500 ether, "User1 should have 500 claimable rewards"  );
+        assertEq(reward.claimableReward(user2, address(rewardToken)), 500 ether, "User2 should have 500 claimable rewards"); 
+        assertEq(reward.claimableReward(user1, address(rewardToken2)), 500 ether, "User1 should have 500 claimable rewards");
+        assertEq(reward.claimableReward(user2, address(rewardToken2)), 500 ether, "User2 should have 500 claimable rewards");
   
         // Users claim their rewards
         vm.startPrank(user1);
         reward.claimReward(address(rewardToken));
+        reward.claimReward(address(rewardToken2));
         
         vm.startPrank(user2);
         reward.claimReward(address(rewardToken));
-        
+        reward.claimReward(address(rewardToken2));
         // Verify rewards were transferred
-        assertEq(rewardToken.balanceOf(user1), 500 ether);
-        assertEq(rewardToken.balanceOf(user2), 500 ether);
+        assertEq(rewardToken.balanceOf(user1), 500 ether, "User1 should have 500 reward tokens" );
+        assertEq(rewardToken.balanceOf(user2), 500 ether, "User2 should have 500 reward tokens");
+        assertEq(rewardToken2.balanceOf(user1), 500 ether, "User1 should have 500 reward tokens");
+        assertEq(rewardToken2.balanceOf(user2), 500 ether, "User2 should have 500 reward tokens");
         
         // Verify claimable rewards are now zero
         assertEq(reward.claimableReward(user1, address(rewardToken)), 0, "User1 should have no claimable rewards left");
         assertEq(reward.claimableReward(user2, address(rewardToken)), 0, "User2 should have no claimable rewards left");
+        assertEq(reward.claimableReward(user1, address(rewardToken2)), 0, "User1 should have no claimable rewards left");
+        assertEq(reward.claimableReward(user2, address(rewardToken2)), 0, "User2 should have no claimable rewards left");
     }
 }
