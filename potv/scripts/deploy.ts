@@ -46,7 +46,7 @@ async function main() {
 
   // Deploy Reward
   const Reward = await ethers.getContractFactory("Reward");
-  const { address: rewardAddress, contract: reward } = await deployUpgradeableContract("Reward", Reward, configAddress, ethers.ZeroAddress, chainAddress);
+  const { address: rewardAddress, contract: reward } = await deployUpgradeableContract("Reward", Reward, configAddress, ethers.ZeroAddress);
   deployedContracts["Reward"] = rewardAddress;
 
   // Deploy Lend

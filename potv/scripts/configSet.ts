@@ -28,7 +28,7 @@ async function main() {
 
   //set reward token
   const rewardToken = await ethers.getContractAt("Reward", ContractAdds.Reward);
- const setRewardToken = await rewardToken.setRewardToken(ContractAdds.Reward);
+ const setRewardToken = await rewardToken.addRewardToken(ContractAdds.Reward);
  await setRewardToken.wait();
 
   //pool set usd address

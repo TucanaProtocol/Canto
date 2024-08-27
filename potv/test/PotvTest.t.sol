@@ -57,7 +57,7 @@ contract PotvTest is Test {
         usd.initialize(address(pool));
         
         reward = new Reward();
-        reward.initialize(address(config), address(0), address(chainContract));
+        reward.initialize(address(config), address(pool));
         
         lend = new Lend();
         lend.initialize(address(chainContract), address(pool), address(config), address(reward), address(priceFeed), address(usd));
@@ -89,7 +89,7 @@ contract PotvTest is Test {
         chainContract.setValidators(validators);
 
         //set reward token
-        reward.setRewardToken(address(rewardToken));
+        reward.addRewardToken(address(rewardToken));
 
         pool.setUsdAddress(address(usd));
         usd.setPool(address(pool));
@@ -289,7 +289,6 @@ contract PotvTest is Test {
 
         
     }
-
     function test_rewardDistribution() public {
         // Setup initial stakes for users
         vm.startPrank(user1);
@@ -301,8 +300,8 @@ contract PotvTest is Test {
         lend.supply(address(collateral1), 100 ether, address(0x3));
         
         // Prepare reward distribution parameters
-        address[] memory validators = new address[](1);
-        validators[0] = address(0x3);
+        address[] memory rewardTokens = new address[](1);
+        rewardTokens[0] = address(rewardToken);
         
         address[] memory lpTokens = new address[](1);
         lpTokens[0] = address(collateral1);
@@ -311,30 +310,30 @@ contract PotvTest is Test {
         rewardAmounts[0] = new uint256[](1);
         rewardAmounts[0][0] = 1000 ether; // 1000 tokens as reward
         
-
-        assertEq(reward.claimableReward(user1), 0);
-        assertEq(reward.claimableReward(user2), 0);
+        assertEq(reward.claimableReward(user1, address(rewardToken)), 0);
+        assertEq(reward.claimableReward(user2, address(rewardToken)), 0);
+        
         // Distribute rewards
         vm.startPrank(owner);
         rewardToken.mint(owner, 1000 ether);
         rewardToken.approve(address(reward), 1000 ether);
-        reward.distributeReward(validators, lpTokens, rewardAmounts);
-        assertEq(reward.claimableReward(user1) , 500 ether);
-        assertEq(reward.claimableReward(user2) , 500 ether); 
+        reward.distributeReward(rewardTokens, lpTokens, rewardAmounts);
+        assertEq(reward.claimableReward(user1, address(rewardToken)), 500 ether);
+        assertEq(reward.claimableReward(user2, address(rewardToken)), 500 ether); 
   
         // Users claim their rewards
         vm.startPrank(user1);
-        reward.claimReward();
+        reward.claimReward(address(rewardToken));
         
         vm.startPrank(user2);
-        reward.claimReward();
+        reward.claimReward(address(rewardToken));
         
         // Verify rewards were transferred
         assertEq(rewardToken.balanceOf(user1), 500 ether);
         assertEq(rewardToken.balanceOf(user2), 500 ether);
         
         // Verify claimable rewards are now zero
-        assertEq(reward.claimableReward(user1), 0, "User1 should have no claimable rewards left");
-        assertEq(reward.claimableReward(user2), 0, "User2 should have no claimable rewards left");
+        assertEq(reward.claimableReward(user1, address(rewardToken)), 0, "User1 should have no claimable rewards left");
+        assertEq(reward.claimableReward(user2, address(rewardToken)), 0, "User2 should have no claimable rewards left");
     }
 }
