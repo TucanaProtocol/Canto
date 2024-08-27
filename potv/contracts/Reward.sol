@@ -102,33 +102,38 @@ contract Reward is Initializable, OwnableUpgradeable, IReward {
     }
 
     /// @notice Distributes rewards to token suppliers for different LP tokens
-    /// @param rewardToken Address of the reward token to distribute
+    /// @param rewardTokens Array of reward token addresses to distribute
     /// @param lpTokens Array of LP token addresses
-    /// @param rewardAmounts Array of reward amounts for each LP token
+    /// @param rewardAmounts 2D array of reward amounts for each reward token and LP token
     /// @dev Can only be called by the contract owner
     function distributeReward(
-        address rewardToken,
+        address[] memory rewardTokens,
         address[] memory lpTokens,
-        uint256[] memory rewardAmounts
+        uint256[][] memory rewardAmounts
     ) external onlyOwner {
-        require(lpTokens.length == rewardAmounts.length, "Reward: Length mismatch");
-        uint256 totalRewardAmount = 0;
+        require(rewardTokens.length == rewardAmounts.length, "Reward: Length mismatch");
+        require(lpTokens.length == rewardAmounts[0].length, "Reward: Length mismatch");
 
-        for (uint256 i = 0; i < lpTokens.length; i++) {
-            uint256 rewardAmount = rewardAmounts[i];
-            address lpToken = lpTokens[i];
-            uint256 totalTokenSupply = pool.totalSupply(lpToken);
-            if (totalTokenSupply == 0) continue;
+        for (uint256 i = 0; i < rewardTokens.length; i++) {
+            address rewardToken = rewardTokens[i];
+            uint256 totalRewardAmount = 0;
 
-            uint256 perTokenRewardIncrease = (rewardAmount * (10**config.getPrecision())) / totalTokenSupply;
-            totalRewardAmount += rewardAmount;
-            updateRewardPerTokenStored(rewardToken, lpToken, perTokenRewardIncrease);
+            for (uint256 j = 0; j < lpTokens.length; j++) {
+                uint256 rewardAmount = rewardAmounts[i][j];
+                address lpToken = lpTokens[j];
+                uint256 totalTokenSupply = pool.totalSupply(lpToken);
+                if (totalTokenSupply == 0) continue;
 
-            emit RewardDistributed(rewardToken, lpToken, perTokenRewardIncrease);
-        }
+                uint256 perTokenRewardIncrease = (rewardAmount * (10**config.getPrecision())) / totalTokenSupply;
+                totalRewardAmount += rewardAmount;
+                updateRewardPerTokenStored(rewardToken, lpToken, perTokenRewardIncrease);
 
-        if (totalRewardAmount > 0) {
-            IERC20Upgradeable(rewardToken).safeTransferFrom(msg.sender, address(this), totalRewardAmount);
+                emit RewardDistributed(rewardToken, lpToken, perTokenRewardIncrease);
+            }
+
+            if (totalRewardAmount > 0) {
+                IERC20Upgradeable(rewardToken).safeTransferFrom(msg.sender, address(this), totalRewardAmount);
+            }
         }
     }
 
