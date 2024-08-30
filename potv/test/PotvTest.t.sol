@@ -72,6 +72,8 @@ contract PotvTest is Test {
         rewardToken2 = new MockToken();
         collateral1.mint(user1, 1000000 ether);
         collateral1.mint(user2, 1000000 ether);
+        collateral2.mint(user1, 1000000 ether);
+        collateral2.mint(user2, 1000000 ether);
 
         //set price
         address[] memory tokenAddresses = new address[](2);
@@ -352,5 +354,115 @@ contract PotvTest is Test {
         assertEq(reward.claimableReward(user2, address(rewardToken)), 0, "User2 should have no claimable rewards left");
         assertEq(reward.claimableReward(user1, address(rewardToken2)), 0, "User1 should have no claimable rewards left");
         assertEq(reward.claimableReward(user2, address(rewardToken2)), 0, "User2 should have no claimable rewards left");
+    }
+    
+    function testRewardDistributionMultipleLPTokens() public {
+        // Setup
+        vm.startPrank(user1);
+        collateral1.approve(address(lend), 10000 ether);
+        lend.supply(address(collateral1), 100 ether, address(0x3));
+        
+        collateral2.approve(address(lend), 10000 ether);
+        lend.supply(address(collateral2), 200 ether, address(0x3));
+        
+        // Prepare reward distribution parameters  
+        address[] memory rewardTokens = new address[](1);
+        rewardTokens[0] = address(rewardToken);
+        
+        address[] memory lpTokens = new address[](2);
+        lpTokens[0] = address(collateral1);
+        lpTokens[1] = address(collateral2);
+        
+        uint256[][] memory rewardAmounts = new uint256[][](1);
+        rewardAmounts[0] = new uint256[](2);
+        rewardAmounts[0][0] = 1000 ether; // 1000 tokens as reward for collateral1
+        rewardAmounts[0][1] = 2000 ether; // 2000 tokens as reward for collateral2
+        
+        // Distribute rewards
+        vm.startPrank(owner);
+        rewardToken.mint(owner, 3000 ether);  
+        rewardToken.approve(address(reward), 3000 ether);
+        reward.distributeReward(rewardTokens, lpTokens, rewardAmounts);
+        
+        // Check claimable rewards
+        assertEq(reward.claimableReward(user1, address(rewardToken)), 3000 ether, "User1 should have 3000 claimable rewards");
+        
+        // User claims rewards
+        vm.startPrank(user1);
+        reward.claimReward(address(rewardToken));
+        
+        // Verify rewards were transferred
+        assertEq(rewardToken.balanceOf(user1), 3000 ether, "User1 should have 3000 reward tokens");
+        
+        // Verify claimable rewards are now zero
+        assertEq(reward.claimableReward(user1, address(rewardToken)), 0, "User1 should have no claimable rewards left");
+    }
+
+    function testRewardDistributionMultipleLPTokensAndMultipleUsers() public {
+        // Setup
+        vm.startPrank(user1);
+        collateral1.approve(address(lend), 10000 ether);
+        lend.supply(address(collateral1), 100 ether, address(0x3));
+        
+        collateral2.approve(address(lend), 10000 ether);
+        lend.supply(address(collateral2), 200 ether, address(0x3));
+        
+        vm.startPrank(user2);
+        collateral1.approve(address(lend), 10000 ether);
+        lend.supply(address(collateral1), 50 ether, address(0x4));
+        
+        collateral2.approve(address(lend), 10000 ether);
+        lend.supply(address(collateral2), 100 ether, address(0x4));
+        
+        // Prepare reward distribution parameters  
+        address[] memory rewardTokens = new address[](2);
+        rewardTokens[0] = address(rewardToken);
+        rewardTokens[1] = address(rewardToken2);
+        
+        address[] memory lpTokens = new address[](2);
+        lpTokens[0] = address(collateral1);
+        lpTokens[1] = address(collateral2);
+        
+        uint256[][] memory rewardAmounts = new uint256[][](2);
+        rewardAmounts[0] = new uint256[](2);
+        rewardAmounts[0][0] = 1500 ether; // 1000 rewardtoken1 as reward for collateral1
+        rewardAmounts[0][1] = 4500 ether; // 2000 rewardtoken1 as reward for collateral2
+        rewardAmounts[1] = new uint256[](2);
+        rewardAmounts[1][0] = 1500 ether; // 500 rewardtoken2 as reward for collateral1
+        rewardAmounts[1][1] = 4500 ether; // 1000 rewardtoken2 as reward for collateral2
+        
+        // Distribute rewards
+        vm.startPrank(owner);
+        rewardToken.mint(owner, 6000 ether);  
+        rewardToken.approve(address(reward),   6000 ether);
+        rewardToken2.mint(owner,   6000 ether);
+        rewardToken2.approve(address(reward), 6000 ether);
+        reward.distributeReward(rewardTokens, lpTokens, rewardAmounts);
+        
+        // Check claimable rewards
+        assertEq(reward.claimableReward(user1, address(rewardToken)), 4000 ether, "User1 should have 4000 claimable rewards for rewardToken");
+        assertEq(reward.claimableReward(user1, address(rewardToken2)), 4000 ether, "User1 should have 4000 claimable rewards for rewardToken2");
+        assertEq(reward.claimableReward(user2, address(rewardToken)), 2000 ether, "User2 should have 2000 claimable rewards for rewardToken");
+        assertEq(reward.claimableReward(user2, address(rewardToken2)), 2000 ether, "User2 should have 2000 claimable rewards for rewardToken2");
+        
+        // Users claim rewards
+        vm.startPrank(user1);
+        reward.claimReward(address(rewardToken));
+        reward.claimReward(address(rewardToken2));
+        vm.startPrank(user2);
+        reward.claimReward(address(rewardToken));
+        reward.claimReward(address(rewardToken2));
+        
+        // Verify rewards were transferred
+        assertEq(rewardToken.balanceOf(user1), 4000 ether, "User1 should have 4000 rewardTokens");
+        assertEq(rewardToken2.balanceOf(user1), 4000 ether, "User1 should have 4000 rewardToken2s");
+        assertEq(rewardToken.balanceOf(user2), 2000 ether, "User2 should have 2000 rewardTokens");
+        assertEq(rewardToken2.balanceOf(user2), 2000 ether, "User2 should have 2000 rewardToken2s");
+        
+        // Verify claimable rewards are now zero
+        assertEq(reward.claimableReward(user1, address(rewardToken)), 0, "User1 should have no claimable rewards left for rewardToken");
+        assertEq(reward.claimableReward(user1, address(rewardToken2)), 0, "User1 should have no claimable rewards left for rewardToken2");
+        assertEq(reward.claimableReward(user2, address(rewardToken)), 0, "User2 should have no claimable rewards left for rewardToken");
+        assertEq(reward.claimableReward(user2, address(rewardToken2)), 0, "User2 should have no claimable rewards left for rewardToken2");
     }
 }
