@@ -256,6 +256,24 @@ contract Lend is Initializable, OwnableUpgradeable, PausableUpgradeable {
     }
 
     /**
+     * @dev Calculates the maximum amount of USD a user can borrow.
+     * @param user The address of the user.
+     * @return The maximum amount of USD the user can borrow.
+     */
+    function getUserMaxBorrowable(address user) public view returns (uint256) {
+        uint256 supplyUSD = getUserSupplyTotalUSD(user);
+        uint256 mcr = config.getMCR();
+        uint256 precisionDecimals = config.getPrecision();
+        uint256 precision = 10 ** precisionDecimals;
+        uint256 maxBorrowUSD = supplyUSD * precision / mcr;
+        uint256 currentBorrowUSD = getUserBorrowTotalUSD(user);
+        if (currentBorrowUSD >= maxBorrowUSD) {
+            return 0;
+        }
+        return maxBorrowUSD - currentBorrowUSD;
+    }
+
+    /**
      * @dev Calculates a user's collateral ratio.
      * Return value equal to getUserSupplyTotalUSD(user) * precision / getUserBorrowTotalUSD(user)
      * @param user The address of the user.
