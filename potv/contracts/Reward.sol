@@ -173,6 +173,12 @@ contract Reward is Initializable, OwnableUpgradeable, IReward {
         return userRewardPerTokenPaid[user][rewardToken][lpToken];
     }
 
+    /// @notice Retrieves all the supported reward tokens
+    /// @return An array of addresses representing the supported reward tokens
+    function getAllRewardTokens() external view returns (address[] memory) {
+        return rewardTokens.values();
+    }
+    
     /// @notice Adds a new reward token to the list of supported reward tokens
     /// @param rewardToken Address of the reward token to add
     /// @dev Can only be called by the contract owner
