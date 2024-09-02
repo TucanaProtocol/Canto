@@ -6,14 +6,14 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeab
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "./interfaces/IConfig.sol";
-import "./interfaces/IUSD.sol";
+import "./interfaces/ITUCUSD.sol";
 import "./interfaces/IPool.sol";
 
 contract Pool is Initializable, OwnableUpgradeable, IPool {
     using SafeERC20Upgradeable for IERC20Upgradeable;
 
     IConfig public config;
-    IUSD public usdToken;
+    ITUCUSD public usdToken;
     address public lendContract;
     
     mapping(address => uint256) public userBorrow;
@@ -42,7 +42,7 @@ contract Pool is Initializable, OwnableUpgradeable, IPool {
     }
 
     function setUsdAddress(address _usdAddress) external onlyOwner {
-        usdToken = IUSD(_usdAddress);
+        usdToken = ITUCUSD(_usdAddress);
     }
 
    
