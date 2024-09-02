@@ -356,7 +356,7 @@ contract PotvTest is Test {
         assertEq(reward.claimableReward(user2, address(rewardToken2)), 0, "User2 should have no claimable rewards left");
     }
     
-    function testRewardDistributionMultipleLPTokens() public {
+    function test_rewardDistributionMultipleLPTokens() public {
         // Setup
         vm.startPrank(user1);
         collateral1.approve(address(lend), 10000 ether);
@@ -398,7 +398,7 @@ contract PotvTest is Test {
         assertEq(reward.claimableReward(user1, address(rewardToken)), 0, "User1 should have no claimable rewards left");
     }
 
-    function testRewardDistributionMultipleLPTokensAndMultipleUsers() public {
+    function test_rewardDistributionMultipleLPTokensAndMultipleUsers() public {
         // Setup
         vm.startPrank(user1);
         collateral1.approve(address(lend), 10000 ether);
