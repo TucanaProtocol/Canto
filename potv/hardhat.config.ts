@@ -21,6 +21,21 @@ const config: HardhatUserConfig = {
       url: "https://evm-rpc.birdee-2.tucana.zone",
       accounts: [PRIVATE_KEY]
     }
+  },
+  etherscan:{
+    apiKey: {
+      'tucana': 'empty'
+    },
+    customChains: [
+      {
+        network: "tucana",
+        chainId: 712,
+        urls: {
+          apiURL: "https://explorer.birdee-2.tucana.zone/api",
+          browserURL: "https://explorer.birdee-2.tucana.zone"
+        }
+      }
+    ]
   }
 };
 
