@@ -14,7 +14,7 @@ async function main() {
   console.log("Deploying contracts...");
 
   const deployedContracts: { [key: string]: string } = {};
-
+ 
   // Deploy Config
   const Config = await ethers.getContractFactory("Config");
   const mcr = ethers.parseUnits("1.5", 6); // 150% MCR
@@ -38,9 +38,9 @@ async function main() {
   deployedContracts["Pool"] = poolAddress;
 
   // Deploy USD
-  const Usd = await ethers.getContractFactory("USD");
-  const { address: usdAddress } = await deployUpgradeableContract("USD", Usd, poolAddress);
-  deployedContracts["USD"] = usdAddress;
+  const Usd = await ethers.getContractFactory("TUCUSD");
+  const { address: usdAddress } = await deployUpgradeableContract("TUCUSD", Usd, poolAddress);
+  deployedContracts["TUCUSD"] = usdAddress;
 
   await pool.setUsdAddress(usdAddress);
 

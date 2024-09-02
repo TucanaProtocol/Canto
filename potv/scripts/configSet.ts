@@ -13,7 +13,7 @@ async function main() {
     const setPrice = await priceFeed.setTokenPrices(tokens, prices);
     await setPrice.wait();
 
-    //add collateral
+    // //add collateral
     const configContract = await ethers.getContractAt("Config", ContractAdds.Config);
     const addCollateral = await configContract.addCollateral(ContractAdds.Collateral_1)
     await addCollateral.wait();
@@ -33,11 +33,11 @@ async function main() {
 
   //pool set usd address
   const pool = await ethers.getContractAt("Pool", ContractAdds.Pool);
-  const setUsdAddress = await pool.setUsdAddress(ContractAdds.USD);
+  const setUsdAddress = await pool.setUsdAddress(ContractAdds.TUCUSD);
   await setUsdAddress.wait();
 
   //usd set pool address
-  const usd = await ethers.getContractAt("USD", ContractAdds.USD);
+  const usd = await ethers.getContractAt("TUCUSD", ContractAdds.TUCUSD);
   const setPoolAddress = await usd.setPool(ContractAdds.Pool);
   await setPoolAddress.wait();
 
