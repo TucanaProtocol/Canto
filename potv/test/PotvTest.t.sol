@@ -229,6 +229,28 @@ contract PotvTest is Test {
         lend.withdraw(address(collateral1), 100 ether, address(0x3));
     }
 
+
+     function testFail_liquidation() public {
+        vm.startPrank(user1);
+        collateral1.approve(address(lend), 10000 ether);
+        lend.supply(address(collateral1), 100 ether, address(0x3));
+        lend.borrow(60 ether);   
+        vm.startPrank(user2);
+        collateral1.approve(address(lend), 10000 ether);
+        lend.supply(address(collateral1), 100 ether, address(0x3));
+        lend.borrow(50 ether);     
+
+        vm.startPrank(owner);
+        
+        config.setLiquidationRate(2000000);
+
+        //user 2 liquidate user 1
+        vm.startPrank(user2);
+
+        lend.liquidate( user1);
+
+    }
+
     function test_liquidation() public {
         vm.startPrank(user1);
         collateral1.approve(address(lend), 10000 ether);
