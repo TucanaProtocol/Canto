@@ -146,6 +146,17 @@ contract PotvTest is Test {
     }
    
 
+
+
+    function test_maxBorrow() public {
+        vm.startPrank(user1);
+       collateral1.approve(address(lend), 10000 ether);
+        lend.supply(address(collateral1), 100 ether, address(0x3));
+        uint256 maxBorrow = lend.getUserMaxBorrowable(user1);
+        console.log(maxBorrow);
+    }
+    
+
     function test_borrow() public {
         vm.startPrank(user1);
         collateral1.approve(address(lend), 10000 ether);

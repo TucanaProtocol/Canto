@@ -265,12 +265,13 @@ contract Lend is Initializable, OwnableUpgradeable, PausableUpgradeable {
         uint256 mcr = config.getMCR();
         uint256 precisionDecimals = config.getPrecision();
         uint256 precision = 10 ** precisionDecimals;
-        uint256 maxBorrowUSD = supplyUSD * precision / mcr;
-        uint256 currentBorrowUSD = getUserBorrowTotalUSD(user);
-        if (currentBorrowUSD >= maxBorrowUSD) {
+        uint256 maxBorrowUSDValue = supplyUSD * precision / mcr;
+        uint256 currentBorrowUSDValue = getUserBorrowTotalUSD(user);
+        if (currentBorrowUSDValue >= maxBorrowUSDValue) {
             return 0;
         }
-        return maxBorrowUSD - currentBorrowUSD;
+        uint256 maxBorrowUSD = (maxBorrowUSDValue - currentBorrowUSDValue) * 10 ** usd.decimals() / precision;
+        return maxBorrowUSD;
     }
 
     /**
