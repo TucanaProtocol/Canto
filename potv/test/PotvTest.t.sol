@@ -25,6 +25,7 @@ contract PotvTest is Test {
     TUCUSD public usd;
     MockToken public collateral1;
     MockToken public collateral2;
+    MockToken public fakeCollateral;
     MockToken public rewardToken;
     MockToken public rewardToken2;
 
@@ -68,12 +69,16 @@ contract PotvTest is Test {
         reward.setLendContract(address(lend));
         collateral1 = new MockToken();
         collateral2 = new MockToken();
+        fakeCollateral = new MockToken();
+
         rewardToken = new MockToken();
         rewardToken2 = new MockToken();
         collateral1.mint(user1, 1000000 ether);
         collateral1.mint(user2, 1000000 ether);
         collateral2.mint(user1, 1000000 ether);
         collateral2.mint(user2, 1000000 ether);
+        fakeCollateral.mint(user1, 1000000 ether);
+        fakeCollateral.mint(user2, 1000000 ether);
 
         //set price
         address[] memory tokenAddresses = new address[](2);
@@ -112,6 +117,12 @@ contract PotvTest is Test {
         assertEq(beforeUserBalance - 100 ether, afterUserBalance);
 
         assertEq(chainContract.getUserValidatorTokenStake(user1, address(0x3), address(collateral1)), 100 ether);
+    }
+
+    function testFail_supplyFakeCollateral() public {
+        vm.startPrank(user1);
+        collateral1.approve(address(lend), 10000 ether);
+        lend.supply(address(fakeCollateral), 100 ether, address(0x3));
     }
 
     function testFail_SupplyToNonExistValidator() public {
@@ -155,13 +166,24 @@ contract PotvTest is Test {
         assertEq(lend.getUserBorrowTotalUSD(user1), 0);
     }
 
+
+    function testFail_repayWhenNotBorrowed() public {
+        vm.startPrank(user1);
+        collateral1.approve(address(lend), 10000 ether);
+        lend.supply(address(collateral1), 100 ether, address(0x3));
+        lend.borrow(60 ether);
+        usd.transfer(user2, 60 ether);
+
+         vm.startPrank(user2);
+        lend.repay(60 ether);
+    }
+
     function testFail_repayUSDExceed() public {
          vm.startPrank(user1);
         collateral1.approve(address(lend), 10000 ether);
         lend.supply(address(collateral1), 100 ether, address(0x3));
         lend.borrow(60 ether);
         lend.repay(61 ether);
-    
     }
 
     function test_Withdraw() public {
@@ -171,6 +193,18 @@ contract PotvTest is Test {
         lend.withdraw(address(collateral1), 10 ether, address(0x3));
         assertEq(collateral1.balanceOf(address(pool)), 90 ether);
         assertEq( pool.userSupply( address(collateral1), user1), 90 ether);
+        lend.withdraw(address(collateral1), 90 ether, address(0x3));
+    }
+
+    function testFail_withdrawLargerThanSupply() public {
+        vm.startPrank(user1);
+        collateral1.approve(address(lend), 10000 ether);
+        lend.supply(address(collateral1), 100 ether, address(0x3));
+        vm.startPrank(user2);
+        collateral1.approve(address(lend), 10000 ether);
+        lend.supply(address(collateral1), 100 ether, address(0x3));
+        vm.startPrank(user1);
+        lend.withdraw(address(collateral1), 110 ether, address(0x3));
     }
 
     function test_withdrawWithBorrow() public {
@@ -183,8 +217,16 @@ contract PotvTest is Test {
         assertEq( pool.userSupply( address(collateral1), user1), 90 ether);
         lend.repay(60 ether);
         lend.withdraw(address(collateral1), 90 ether, address(0x3));
-          assertEq(collateral1.balanceOf(address(pool)), 0);
+        assertEq(collateral1.balanceOf(address(pool)), 0);
         assertEq( pool.userSupply( address(collateral1), user1), 0);
+    }
+
+    function testFail_withdrawWithBorrow() public {
+        vm.startPrank(user1);
+        collateral1.approve(address(lend), 10000 ether);
+        lend.supply(address(collateral1), 100 ether, address(0x3));
+        lend.borrow(60 ether);
+        lend.withdraw(address(collateral1), 100 ether, address(0x3));
     }
 
     function test_liquidation() public {
