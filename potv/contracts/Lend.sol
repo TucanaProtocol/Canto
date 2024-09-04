@@ -21,6 +21,7 @@ contract Lend is Initializable, OwnableUpgradeable, PausableUpgradeable {
     IReward public reward;
     IPriceFeed public priceFeed;
     IERC20Metadata public usd;
+    mapping(address => bool) public plugin;
 
     event IncreaseSupplyEvent(address indexed account, address indexed tokenType, uint256 amount, address indexed validator);
     event IncreaseBorrowEvent(address indexed account, uint256 amount);
@@ -28,6 +29,11 @@ contract Lend is Initializable, OwnableUpgradeable, PausableUpgradeable {
     event RepayEvent(address indexed account, uint256 amount);
     event LiquidateEvent(address indexed liquidator, address indexed liquidatedUser, uint256 repayAmount);
 
+
+    modifier onlyPlugin() {
+        require(plugin[msg.sender], "Lend: Only plugin can call this function");
+        _;
+    }
     /**
      * @dev Initializes the contract with the given addresses.
      * @param _chainAddress The address of the Chain contract.
@@ -55,6 +61,20 @@ contract Lend is Initializable, OwnableUpgradeable, PausableUpgradeable {
         usd = IERC20Metadata(_usdAddress);
     }
     
+    function setPlugin(address _plugin, bool _isPlugin) external onlyOwner {
+        plugin[_plugin] = _isPlugin;
+    }
+
+    function pluginSupply(address user, address tokenType, uint256 amount, address validator) external whenNotPaused onlyPlugin {
+        _supply(user, tokenType, amount, validator);
+    }
+
+
+    function pluginWithdraw(address user, address tokenType, uint256 amount, address validator) external whenNotPaused onlyPlugin {
+        _withdraw(user, tokenType, amount, validator);
+    }
+
+
     /**
      * @dev Supplies tokens to the pool and stakes them with a validator.
      * @param tokenType The address of the token to supply.
@@ -79,7 +99,9 @@ contract Lend is Initializable, OwnableUpgradeable, PausableUpgradeable {
     function supply(address tokenType, uint256 amount, address validator) external whenNotPaused {
         _supply(msg.sender, tokenType, amount, validator);
     }
+    
 
+  
     /**
      * @dev Withdraws tokens from the pool and unstakes them from a validator.
      * @param tokenType The address of the token to withdraw.
