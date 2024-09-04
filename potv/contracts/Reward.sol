@@ -6,18 +6,20 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeab
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "./interfaces/IConfig.sol";
-import "./interfaces/IChain.sol";
+import "./interfaces/IPool.sol";
 import "./interfaces/IReward.sol";
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 contract Reward is Initializable, OwnableUpgradeable, IReward {
     using SafeERC20Upgradeable for IERC20Upgradeable;
+    using EnumerableSet for EnumerableSet.AddressSet;
 
+    EnumerableSet.AddressSet private rewardTokens;
     mapping(address => mapping(address => uint256)) private rewardPerTokenStored;
     mapping(address => mapping(address => mapping(address => uint256))) private userRewardPerTokenPaid;
-    mapping(address => uint256) private rewards;
-    IERC20Upgradeable public rewardToken;
+    mapping(address => mapping(address => uint256)) private rewards;
     IConfig public config;
-    IChain public chain;
+    IPool public pool;
     address public lendAddress;
 
     /// @notice Modifier to restrict function access to only the lend contract
@@ -27,16 +29,14 @@ contract Reward is Initializable, OwnableUpgradeable, IReward {
         _;
     }
 
-    /// @notice Initializes the contract with configuration, reward token, and chain addresses
+    /// @notice Initializes the contract with configuration and pool addresses
     /// @param _configAddress Address of the config contract
-    /// @param _rewardToken Address of the reward token
-    /// @param _chainAddress Address of the chain contract
+    /// @param _poolAddress Address of the pool contract
     /// @dev This function can only be called once due to the initializer modifier
-    function initialize(address _configAddress, address _rewardToken, address _chainAddress) public initializer {
+    function initialize(address _configAddress, address _poolAddress) public initializer {
         __Ownable_init();
         config = IConfig(_configAddress);
-        rewardToken = IERC20Upgradeable(_rewardToken);
-        chain = IChain(_chainAddress);
+        pool = IPool(_poolAddress);
     }
     
     /// @notice Sets the lend contract address
@@ -45,139 +45,151 @@ contract Reward is Initializable, OwnableUpgradeable, IReward {
     function setLendContract(address _lendAddress) external onlyOwner {
         lendAddress = _lendAddress;
     }
-    
-    /// @notice Sets the reward token address
-    /// @param _rewardToken Address of the new reward token
-    /// @dev Can only be called by the contract owner
-    function setRewardToken(address _rewardToken) external onlyOwner {
-        rewardToken = IERC20Upgradeable(_rewardToken);
-    }
 
     /// @notice Updates the reward for a specific user
     /// @param user Address of the user to update rewards for
     /// @dev Calculates and stores earned rewards, updates user reward per token paid
     function updateReward(address user) public {
-        uint256 earnedAmount = earned(user);
-        rewards[user] += earnedAmount;
+        for (uint256 i = 0; i < rewardTokens.length(); i++) {
+            address rewardToken = rewardTokens.at(i);
+            uint256 earnedAmount = earned(user, rewardToken);
+            rewards[user][rewardToken] += earnedAmount;
 
-        address[] memory validators = chain.getValidators();
-        for (uint256 i = 0; i < validators.length; i++) {
-            address validator = validators[i];
             address[] memory lpTokens = config.getAllWhitelistTokens();
             for (uint256 j = 0; j < lpTokens.length; j++) {
                 address lpToken = lpTokens[j];
-                updateUserRewardPerTokenPaid(user, lpToken, validator);
+                updateUserRewardPerTokenPaid(user, rewardToken, lpToken);
             }
         }
     }
 
-    /// @notice Calculates the total earned rewards for a user
+    /// @notice Calculates the total earned rewards for a user for a specific reward token
     /// @param user Address of the user to calculate rewards for
-    /// @return totalEarned The total amount of rewards earned by the user
-    function earned(address user) public view returns (uint256) {
+    /// @param rewardToken Address of the reward token
+    /// @return totalEarned The total amount of rewards earned by the user for the reward token
+    function earned(address user, address rewardToken) public view returns (uint256) {
         uint256 totalEarned = 0;
-        address[] memory validators = chain.getValidators();
-        for (uint256 i = 0; i < validators.length; i++) {
-            address validator = validators[i];
-            address[] memory lpTokens = config.getAllWhitelistTokens();
-            for (uint256 j = 0; j < lpTokens.length; j++) {
-                address lpToken = lpTokens[j];
-                uint256 userValidatorTokenStake = chain.getUserValidatorTokenStake(user, validator, lpToken);
-                uint256 rewardPerToken = getRewardPerTokenStored(lpToken, validator);
-                uint256 userRewardPaid = getUserRewardPaid(user, lpToken, validator);
-                totalEarned += (userValidatorTokenStake * (rewardPerToken - userRewardPaid)) / (10**config.getPrecision());
-            }
+        address[] memory lpTokens = config.getAllWhitelistTokens();
+        for (uint256 i = 0; i < lpTokens.length; i++) {
+            address lpToken = lpTokens[i];
+            uint256 userTokenSupply = pool.getUserTokenSupply(user, lpToken);
+            uint256 rewardPerToken = getRewardPerTokenStored(rewardToken, lpToken);
+            uint256 userRewardPaid = getUserRewardPaid(user, rewardToken, lpToken);
+            totalEarned += (userTokenSupply * (rewardPerToken - userRewardPaid)) / (10**config.getPrecision());
         }
         return totalEarned;
     }
 
-    /// @notice Allows a user to claim their accumulated rewards
+    /// @notice Allows a user to claim their accumulated rewards for a specific reward token
+    /// @param rewardToken Address of the reward token to claim
     /// @dev Updates rewards before claiming and transfers the reward tokens to the user
-    function claimReward() external {
+    function claimReward(address rewardToken) external {
         updateReward(msg.sender);
-        uint256 reward = rewards[msg.sender];
+        uint256 reward = rewards[msg.sender][rewardToken];
         if (reward > 0) {
-            rewards[msg.sender] = 0;
-            rewardToken.safeTransfer(msg.sender, reward);
-            emit RewardClaimed(msg.sender, reward);
+            rewards[msg.sender][rewardToken] = 0;
+            IERC20Upgradeable(rewardToken).safeTransfer(msg.sender, reward);
+            emit RewardClaimed(msg.sender, rewardToken, reward);
         }
     }
 
-    /// @notice Calculates the claimable reward for a user
+    /// @notice Calculates the claimable reward for a user for a specific reward token
     /// @param user Address of the user to check claimable rewards for
-    /// @return The total amount of claimable rewards for the user
-    function claimableReward(address user) external view returns (uint256) {
-        return rewards[user] + earned(user);
+    /// @param rewardToken Address of the reward token
+    /// @return The total amount of claimable rewards for the user for the reward token
+    function claimableReward(address user, address rewardToken) external view returns (uint256) {
+        return rewards[user][rewardToken] + earned(user, rewardToken);
     }
 
-    /// @notice Distributes rewards to validators for different LP tokens
-    /// @param validators Array of validator addresses
+    /// @notice Distributes rewards to token suppliers for different LP tokens
+    /// @param rewardTokens Array of reward token addresses to distribute
     /// @param lpTokens Array of LP token addresses
-    /// @param rewardAmounts 2D array of reward amounts for each validator and LP token
+    /// @param rewardAmounts 2D array of reward amounts for each reward token and LP token
     /// @dev Can only be called by the contract owner
     function distributeReward(
-        address[] memory validators,
+        address[] memory rewardTokens,
         address[] memory lpTokens,
         uint256[][] memory rewardAmounts
     ) external onlyOwner {
-        require(rewardAmounts.length == validators.length, "Reward: Length mismatch validators");
-        uint256 totalRewardAmount = 0;
+        require(rewardTokens.length == rewardAmounts.length, "Reward: Length mismatch");
+        require(lpTokens.length == rewardAmounts[0].length, "Reward: Length mismatch");
 
-        for (uint256 i = 0; i < validators.length; i++) {
-            require(rewardAmounts[i].length == lpTokens.length, "Reward: Length mismatch lpTokens");
+        for (uint256 i = 0; i < rewardTokens.length; i++) {
+            address rewardToken = rewardTokens[i];
+            uint256 totalRewardAmount = 0;
+
             for (uint256 j = 0; j < lpTokens.length; j++) {
                 uint256 rewardAmount = rewardAmounts[i][j];
-                address validator = validators[i];
                 address lpToken = lpTokens[j];
-                uint256 validatorTokenStake = chain.getValidatorTokenStake(validator, lpToken);
-                if (validatorTokenStake == 0) continue;
+                uint256 totalTokenSupply = pool.totalSupply(lpToken);
+                if (totalTokenSupply == 0) continue;
 
-                uint256 perTokenRewardIncrease = (rewardAmount * (10**config.getPrecision())) / validatorTokenStake;
+                uint256 perTokenRewardIncrease = (rewardAmount * (10**config.getPrecision())) / totalTokenSupply;
                 totalRewardAmount += rewardAmount;
-                updateRewardPerTokenStored(lpToken, validator, perTokenRewardIncrease);
+                updateRewardPerTokenStored(rewardToken, lpToken, perTokenRewardIncrease);
 
-                emit RewardDistributed(validator, lpToken, perTokenRewardIncrease);
+                emit RewardDistributed(rewardToken, lpToken, perTokenRewardIncrease);
+            }
+
+            if (totalRewardAmount > 0) {
+                IERC20Upgradeable(rewardToken).safeTransferFrom(msg.sender, address(this), totalRewardAmount);
             }
         }
-
-        if (totalRewardAmount > 0) {
-            rewardToken.safeTransferFrom(msg.sender, address(this), totalRewardAmount);
-        }
     }
 
-    /// @notice Updates the user's reward per token paid for a specific LP token and validator
+    /// @notice Updates the user's reward per token paid for a specific reward token and LP token
     /// @param user Address of the user
+    /// @param rewardToken Address of the reward token
     /// @param lpToken Address of the LP token
-    /// @param validator Address of the validator
     /// @dev Internal function to update user-specific reward tracking
-    function updateUserRewardPerTokenPaid(address user, address lpToken, address validator) internal {
-        uint256 rewardPerTokenStored = getRewardPerTokenStored(lpToken, validator);
-        userRewardPerTokenPaid[user][validator][lpToken] = rewardPerTokenStored;
+    function updateUserRewardPerTokenPaid(address user, address rewardToken, address lpToken) internal {
+        uint256 rewardPerTokenStored = getRewardPerTokenStored(rewardToken, lpToken);
+        userRewardPerTokenPaid[user][rewardToken][lpToken] = rewardPerTokenStored;
     }
 
-    /// @notice Retrieves the stored reward per token for a specific LP token and validator
+    /// @notice Retrieves the stored reward per token for a specific reward token and LP token
+    /// @param rewardToken Address of the reward token
     /// @param lpToken Address of the LP token
-    /// @param validator Address of the validator
     /// @return The stored reward per token
-    function getRewardPerTokenStored(address lpToken, address validator) public view returns (uint256) {
-        return rewardPerTokenStored[validator][lpToken];
+    function getRewardPerTokenStored(address rewardToken, address lpToken) public view returns (uint256) {
+        return rewardPerTokenStored[rewardToken][lpToken];
     }
 
-    /// @notice Updates the stored reward per token for a specific LP token and validator
+    /// @notice Updates the stored reward per token for a specific reward token and LP token
+    /// @param rewardToken Address of the reward token
     /// @param lpToken Address of the LP token
-    /// @param validator Address of the validator
     /// @param rewardPerToken Amount to increase the reward per token by
     /// @dev Internal function to update global reward tracking
-    function updateRewardPerTokenStored(address lpToken, address validator, uint256 rewardPerToken) internal {
-        rewardPerTokenStored[validator][lpToken] += rewardPerToken;
+    function updateRewardPerTokenStored(address rewardToken, address lpToken, uint256 rewardPerToken) internal {
+        rewardPerTokenStored[rewardToken][lpToken] += rewardPerToken;
     }
 
-    /// @notice Retrieves the user's paid reward per token for a specific LP token and validator
+    /// @notice Retrieves the user's paid reward per token for a specific reward token and LP token
     /// @param user Address of the user
+    /// @param rewardToken Address of the reward token
     /// @param lpToken Address of the LP token
-    /// @param validator Address of the validator
     /// @return The user's paid reward per token
-    function getUserRewardPaid(address user, address lpToken, address validator) public view returns (uint256) {
-        return userRewardPerTokenPaid[user][validator][lpToken];
+    function getUserRewardPaid(address user, address rewardToken, address lpToken) public view returns (uint256) {
+        return userRewardPerTokenPaid[user][rewardToken][lpToken];
+    }
+
+    /// @notice Retrieves all the supported reward tokens
+    /// @return An array of addresses representing the supported reward tokens
+    function getAllRewardTokens() external view returns (address[] memory) {
+        return rewardTokens.values();
+    }
+    
+    /// @notice Adds a new reward token to the list of supported reward tokens
+    /// @param rewardToken Address of the reward token to add
+    /// @dev Can only be called by the contract owner
+    function addRewardToken(address rewardToken) external onlyOwner {
+        rewardTokens.add(rewardToken);
+    }
+
+    /// @notice Removes a reward token from the list of supported reward tokens
+    /// @param rewardToken Address of the reward token to remove
+    /// @dev Can only be called by the contract owner
+    function removeRewardToken(address rewardToken) external onlyOwner {
+        rewardTokens.remove(rewardToken);
     }
 }

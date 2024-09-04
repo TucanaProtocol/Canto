@@ -5,11 +5,11 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "./interfaces/IPool.sol";
 
-contract USD is Initializable, ERC20Upgradeable, OwnableUpgradeable {
+contract TUCUSD is Initializable, ERC20Upgradeable, OwnableUpgradeable {
     IPool public pool;
 
     function initialize(address _poolAddress) public initializer {
-        __ERC20_init("USD", "USD");
+        __ERC20_init("TUCUSD", "TUCUSD");
         __Ownable_init();
         pool = IPool(_poolAddress);
     }

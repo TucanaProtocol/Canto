@@ -54,6 +54,7 @@ contract Lend is Initializable, OwnableUpgradeable, PausableUpgradeable {
         priceFeed = IPriceFeed(_priceFeedAddress);
         usd = IERC20Metadata(_usdAddress);
     }
+    
     /**
      * @dev Supplies tokens to the pool and stakes them with a validator.
      * @param tokenType The address of the token to supply.
@@ -76,11 +77,7 @@ contract Lend is Initializable, OwnableUpgradeable, PausableUpgradeable {
      * - ChainContract.sol: Stakes the tokens with the specified validator.
      */
     function supply(address tokenType, uint256 amount, address validator) external whenNotPaused {
-        reward.updateReward(msg.sender);
-        require(config.isWhitelistToken(tokenType), "Lend: Not whitelisted token");
-        IERC20(tokenType).safeTransferFrom(msg.sender, address(pool), amount);
-        _increaseAndStake(msg.sender, tokenType, amount, validator);
-        emit IncreaseSupplyEvent(msg.sender, tokenType, amount, validator);
+        _supply(msg.sender, tokenType, amount, validator);
     }
 
     /**
@@ -103,12 +100,9 @@ contract Lend is Initializable, OwnableUpgradeable, PausableUpgradeable {
      * - ChainContract.sol: Unstakes the tokens from the specified validator.
      */
     function withdraw(address tokenType, uint256 amount, address validator) external whenNotPaused {
-        reward.updateReward(msg.sender);
-        uint256 maxWithdrawable = getTokenMaxWithdrawable(msg.sender, tokenType);
-        require(amount <= maxWithdrawable, "Lend: Exceed withdraw amount");
-        _decreaseAndUnstake(msg.sender, tokenType, amount, validator);
-        emit DecreaseSupplyEvent(msg.sender, tokenType, amount, validator);
+        _withdraw(msg.sender, tokenType, amount, validator);
     }
+    
     /**
      * @dev Borrows USD tokens from the pool.
      *
@@ -125,11 +119,7 @@ contract Lend is Initializable, OwnableUpgradeable, PausableUpgradeable {
      * @param amount The amount of USD tokens to borrow.
      */
     function borrow(uint256 amount) external whenNotPaused {
-        pool.borrowUSD(msg.sender, amount);
-        uint256 userCollateralRatio = getUserCollateralRatio(msg.sender);
-        uint256 systemMCR = config.getMCR();
-        require(userCollateralRatio > systemMCR, "Lend: Lower than MCR");
-        emit IncreaseBorrowEvent(msg.sender, amount);
+        _borrow(msg.sender, amount);
     }
     /**
      * @dev Repays borrowed USD tokens to the pool.
@@ -142,11 +132,7 @@ contract Lend is Initializable, OwnableUpgradeable, PausableUpgradeable {
      * 2. Emits a RepayEvent to log the repayment
      */
     function repay(uint256 amount) external whenNotPaused {
-       
-        pool.repayUSD(msg.sender, msg.sender, amount);
-
-       
-        emit RepayEvent(msg.sender, amount);
+        _repay(msg.sender, amount);
     }
 
     /**
@@ -256,6 +242,25 @@ contract Lend is Initializable, OwnableUpgradeable, PausableUpgradeable {
     }
 
     /**
+     * @dev Calculates the maximum amount of USD a user can borrow.
+     * @param user The address of the user.
+     * @return The maximum amount of USD the user can borrow.
+     */
+    function getUserMaxBorrowable(address user) public view returns (uint256) {
+        uint256 supplyUSD = getUserSupplyTotalUSD(user);
+        uint256 mcr = config.getMCR();
+        uint256 precisionDecimals = config.getPrecision();
+        uint256 precision = 10 ** precisionDecimals;
+        uint256 maxBorrowUSDValue = supplyUSD * precision / mcr;
+        uint256 currentBorrowUSDValue = getUserBorrowTotalUSD(user);
+        if (currentBorrowUSDValue >= maxBorrowUSDValue) {
+            return 0;
+        }
+        uint256 maxBorrowUSD = (maxBorrowUSDValue - currentBorrowUSDValue) * 10 ** usd.decimals() / precision;
+        return maxBorrowUSD;
+    }
+
+    /**
      * @dev Calculates a user's collateral ratio.
      * Return value equal to getUserSupplyTotalUSD(user) * precision / getUserBorrowTotalUSD(user)
      * @param user The address of the user.
@@ -318,6 +323,39 @@ contract Lend is Initializable, OwnableUpgradeable, PausableUpgradeable {
         }
         return price;
     }
+
+    function _supply(address user, address tokenType, uint256 amount, address validator) internal {
+        reward.updateReward(user);
+        require(config.isWhitelistToken(tokenType), "Lend: Not whitelisted token");
+        IERC20(tokenType).safeTransferFrom(msg.sender, address(pool), amount);
+        _increaseAndStake(user, tokenType, amount, validator);
+        emit IncreaseSupplyEvent(user, tokenType, amount, validator);
+    }
+
+    function _withdraw(address user, address tokenType, uint256 amount, address validator) internal {
+        reward.updateReward(user);
+        uint256 maxWithdrawable = getTokenMaxWithdrawable(user, tokenType);
+        require(amount <= maxWithdrawable, "Lend: Exceed withdraw amount");
+        _decreaseAndUnstake(user, tokenType, amount, validator);
+        emit DecreaseSupplyEvent(user, tokenType, amount, validator);
+    }
+
+
+    function _borrow(address user, uint256 amount) internal {
+        pool.borrowUSD(user, amount);
+        uint256 userCollateralRatio = getUserCollateralRatio(user);
+        uint256 systemMCR = config.getMCR();
+        require(userCollateralRatio > systemMCR, "Lend: Lower than MCR");
+        emit IncreaseBorrowEvent(user, amount);
+    }
+
+    function _repay(address user, uint256 amount) internal {
+        pool.repayUSD(user, user, amount);
+        emit RepayEvent(user, amount);
+    }
+    
+
+
 
     /**
      * @dev Increases a user's token supply and stakes the tokens with a validator.

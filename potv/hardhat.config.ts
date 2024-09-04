@@ -9,7 +9,7 @@ const PRIVATE_KEY = process.env.PRIVATE_KEY || '';
 const config: HardhatUserConfig = {
   solidity: "0.8.19",
   networks: {
-    "canto": {
+    "canto-testnet": {
       url: "https://canto-testnet.plexnode.wtf",
       accounts: [PRIVATE_KEY]
     },
@@ -17,6 +17,25 @@ const config: HardhatUserConfig = {
       url: "https://arb-sepolia.g.alchemy.com/v2/I-ZVEdUQy4Mk3rwbsNAIp_MVql6coseO",
       accounts: [PRIVATE_KEY]
     },
+    tucana:{
+      url: "https://evm-rpc.birdee-2.tucana.zone",
+      accounts: [PRIVATE_KEY]
+    }
+  },
+  etherscan:{
+    apiKey: {
+      'tucana': 'empty'
+    },
+    customChains: [
+      {
+        network: "tucana",
+        chainId: 712,
+        urls: {
+          apiURL: "https://explorer.birdee-2.tucana.zone/api",
+          browserURL: "https://explorer.birdee-2.tucana.zone"
+        }
+      }
+    ]
   }
 };
 
