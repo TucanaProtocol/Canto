@@ -6,6 +6,7 @@ import "./interfaces/IPool.sol";
 import "./interfaces/IConfig.sol";
 import "./interfaces/IReward.sol";
 import "./interfaces/IPriceFeed.sol";
+import "./interfaces/ILend.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
@@ -13,7 +14,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-contract Lend is Initializable, OwnableUpgradeable, PausableUpgradeable {
+contract Lend is Initializable, OwnableUpgradeable, PausableUpgradeable, ILend {
     using SafeERC20 for IERC20;
     IChain public chain;
     IPool public pool;
@@ -35,7 +36,7 @@ contract Lend is Initializable, OwnableUpgradeable, PausableUpgradeable {
         _;
     }
     /**
-     * @dev Initializes the contract with the given addresses.
+     * @dev Initializes the contrpluginSupplyact with the given addresses.
      * @param _chainAddress The address of the Chain contract.
      * @param _poolAddress The address of the Pool contract.
      * @param _configAddress The address of the Config contract.

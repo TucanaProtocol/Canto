@@ -19,6 +19,11 @@ contract Pool is Initializable, OwnableUpgradeable, IPool {
     mapping(address => uint256) public userBorrow;
     uint256 public totalBorrow;
 
+
+    
+
+
+    /// token address => user address => amount
     mapping(address => mapping(address => uint256)) public userSupply;
     mapping(address => uint256) public totalSupply;
 
