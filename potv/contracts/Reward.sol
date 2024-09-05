@@ -102,25 +102,25 @@ contract Reward is Initializable, OwnableUpgradeable, IReward {
     }
 
     /// @notice Distributes rewards to token suppliers for different LP tokens
-    /// @param rewardTokens Array of reward token addresses to distribute
-    /// @param lpTokens Array of LP token addresses
-    /// @param rewardAmounts 2D array of reward amounts for each reward token and LP token
+    /// @param _rewardTokens Array of reward token addresses to distribute
+    /// @param _lpTokens Array of LP token addresses
+    /// @param _rewardAmounts 2D array of reward amounts for each reward token and LP token
     /// @dev Can only be called by the contract owner
     function distributeReward(
-        address[] memory rewardTokens,
-        address[] memory lpTokens,
-        uint256[][] memory rewardAmounts
+        address[] memory _rewardTokens,
+        address[] memory _lpTokens,
+        uint256[][] memory _rewardAmounts
     ) external onlyOwner {
-        require(rewardTokens.length == rewardAmounts.length, "Reward: Length mismatch");
-        require(lpTokens.length == rewardAmounts[0].length, "Reward: Length mismatch");
+        require(_rewardTokens.length == _rewardAmounts.length, "Reward: Length mismatch");
+        require(_lpTokens.length == _rewardAmounts[0].length, "Reward: Length mismatch");
 
-        for (uint256 i = 0; i < rewardTokens.length; i++) {
-            address rewardToken = rewardTokens[i];
+        for (uint256 i = 0; i < _rewardTokens.length; i++) {
+            address rewardToken = _rewardTokens[i];
             uint256 totalRewardAmount = 0;
 
-            for (uint256 j = 0; j < lpTokens.length; j++) {
-                uint256 rewardAmount = rewardAmounts[i][j];
-                address lpToken = lpTokens[j];
+            for (uint256 j = 0; j < _lpTokens.length; j++) {
+                uint256 rewardAmount = _rewardAmounts[i][j];
+                address lpToken = _lpTokens[j];
                 uint256 totalTokenSupply = pool.totalSupply(lpToken);
                 if (totalTokenSupply == 0) continue;
 
@@ -143,8 +143,8 @@ contract Reward is Initializable, OwnableUpgradeable, IReward {
     /// @param lpToken Address of the LP token
     /// @dev Internal function to update user-specific reward tracking
     function updateUserRewardPerTokenPaid(address user, address rewardToken, address lpToken) internal {
-        uint256 rewardPerTokenStored = getRewardPerTokenStored(rewardToken, lpToken);
-        userRewardPerTokenPaid[user][rewardToken][lpToken] = rewardPerTokenStored;
+        uint256 rewardPerTokenStoredLocal = getRewardPerTokenStored(rewardToken, lpToken);
+        userRewardPerTokenPaid[user][rewardToken][lpToken] = rewardPerTokenStoredLocal;
     }
 
     /// @notice Retrieves the stored reward per token for a specific reward token and LP token

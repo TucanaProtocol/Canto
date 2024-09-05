@@ -13,7 +13,7 @@ interface IPool {
     function totalSupply(address) external view returns (uint256);
 
     function increasePoolToken(address user,address tokenAddress, uint256 amount) external;
-    function decreasePoolToken(address user,address tokenAddress, uint256 amount) external;
+    function decreasePoolToken(address user, address receiver, address tokenAddress, uint256 amount) external;
     function liquidateTokens(address src, address dest) external;
     function borrowUSD(address user, uint256 amount) external;
     function repayUSD(address repayer, address repaidUser, uint256 amount) external;

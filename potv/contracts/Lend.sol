@@ -72,7 +72,7 @@ contract Lend is Initializable, OwnableUpgradeable, PausableUpgradeable, ILend {
 
 
     function pluginWithdraw(address user, address tokenType, uint256 amount, address validator) external whenNotPaused onlyPlugin {
-        _withdraw(user, tokenType, amount, validator);
+        _withdraw(user, msg.sender, tokenType, amount, validator);
     }
 
 
@@ -123,7 +123,7 @@ contract Lend is Initializable, OwnableUpgradeable, PausableUpgradeable, ILend {
      * - ChainContract.sol: Unstakes the tokens from the specified validator.
      */
     function withdraw(address tokenType, uint256 amount, address validator) external whenNotPaused {
-        _withdraw(msg.sender, tokenType, amount, validator);
+        _withdraw(msg.sender, msg.sender, tokenType, amount, validator);
     }
     
     /**
@@ -355,11 +355,11 @@ contract Lend is Initializable, OwnableUpgradeable, PausableUpgradeable, ILend {
         emit IncreaseSupplyEvent(user, tokenType, amount, validator);
     }
 
-    function _withdraw(address user, address tokenType, uint256 amount, address validator) internal {
+    function _withdraw(address user, address receiver, address tokenType, uint256 amount, address validator) internal {
         reward.updateReward(user);
         uint256 maxWithdrawable = getTokenMaxWithdrawable(user, tokenType);
         require(amount <= maxWithdrawable, "Lend: Exceed withdraw amount");
-        _decreaseAndUnstake(user, tokenType, amount, validator);
+        _decreaseAndUnstake(user, receiver, tokenType, amount, validator);
         emit DecreaseSupplyEvent(user, tokenType, amount, validator);
     }
 
@@ -395,12 +395,13 @@ contract Lend is Initializable, OwnableUpgradeable, PausableUpgradeable, ILend {
     /**
      * @dev Decreases a user's token supply and unstakes the tokens from a validator.
      * @param user The address of the user.
+     * @param receiver The address of the receiver.
      * @param tokenType The address of the token.
      * @param amount The amount of tokens to decrease and unstake.
      * @param validator The address of the validator to unstake from.
      */
-    function _decreaseAndUnstake(address user, address tokenType, uint256 amount, address validator) internal {
-        pool.decreasePoolToken(user, tokenType, amount);
+    function _decreaseAndUnstake(address user, address receiver, address tokenType, uint256 amount, address validator) internal {
+        pool.decreasePoolToken(user, receiver, tokenType, amount);
         chain.unstakeToken(user, validator, tokenType, amount);
     }
 }

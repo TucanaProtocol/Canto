@@ -63,13 +63,13 @@ contract Pool is Initializable, OwnableUpgradeable, IPool {
         emit IncreaseToken(user, tokenAddress, amount);
     }
 
-    function decreasePoolToken(address user,address tokenAddress, uint256 amount) external onlyLend {
+    function decreasePoolToken(address user, address receiver, address tokenAddress, uint256 amount) external onlyLend {
         require(userSupply[tokenAddress][user] >= amount, "Pool: Insufficient balance");
 
         userSupply[tokenAddress][user] -= amount;
         totalSupply[tokenAddress] -= amount;
 
-        IERC20Upgradeable(tokenAddress).safeTransfer(user, amount);
+        IERC20Upgradeable(tokenAddress).safeTransfer(receiver, amount);
 
         emit DecreaseToken(user, tokenAddress, amount);
     }
