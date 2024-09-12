@@ -15,8 +15,12 @@ contract Reward is Initializable, OwnableUpgradeable, IReward {
     using EnumerableSet for EnumerableSet.AddressSet;
 
     EnumerableSet.AddressSet private rewardTokens;
+    //rewardToken => lpToken => amount
     mapping(address => mapping(address => uint256)) private rewardPerTokenStored;
+    //user => rewardToken => lpToken => amount
     mapping(address => mapping(address => mapping(address => uint256))) private userRewardPerTokenPaid;
+
+    //user => rewardToken => amount
     mapping(address => mapping(address => uint256)) private rewards;
     IConfig public config;
     IPool public pool;
