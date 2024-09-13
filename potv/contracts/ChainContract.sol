@@ -46,18 +46,28 @@ contract ChainContract is Initializable, OwnableUpgradeable, IChain {
 
     function stakeToken(address user, address validator, address tokenType, uint256 amount) external onlyLend {
         require(validators.contains(validator), "ChainContract: Invalid validator");
-        userStakes[user][validator][tokenType] += amount;
-        validatorStakes[validator][tokenType] += amount;
+        _stakeToken(user, validator, tokenType, amount);
         validatorStakedUsers[validator].add(user);
     }
 
+    function _stakeToken(address user, address validator, address tokenType, uint256 amount) internal {
+        userStakes[user][validator][tokenType] += amount;
+        validatorStakes[validator][tokenType] += amount;
+        emit StakeTokenEvent(user, validator, tokenType, amount);
+    }
+
+
     function unstakeToken(address user, address validator, address tokenType, uint256 amount) external onlyLend {
         require(userStakes[user][validator][tokenType] >= amount, "ChainContract: Insufficient stake");
-        userStakes[user][validator][tokenType] -= amount;
-        validatorStakes[validator][tokenType] -= amount;
+        _unstakeToken(user, validator, tokenType, amount);
         if (userStakes[user][validator][tokenType] == 0) {
             validatorStakedUsers[validator].remove(user);
         }
+    }
+    function _unstakeToken(address user, address validator, address tokenType, uint256 amount) internal {
+        userStakes[user][validator][tokenType] -= amount;
+        validatorStakes[validator][tokenType] -= amount;
+        emit UnstakeTokenEvent(user, validator, tokenType, amount);
     }
 
     function liquidatePosition(address liquidator, address liquidatedParty) external onlyLend {
@@ -68,8 +78,8 @@ contract ChainContract is Initializable, OwnableUpgradeable, IChain {
                 address tokenType = whitelistTokens[j];
                 uint256 stakeAmount = userStakes[liquidatedParty][validator][tokenType];
                 if (stakeAmount > 0) {
-                    userStakes[liquidatedParty][validator][tokenType] = 0;
-                    userStakes[liquidator][validator][tokenType] += stakeAmount;
+                    _unstakeToken(liquidatedParty, validator, tokenType, stakeAmount);
+                    _stakeToken(liquidator, validator, tokenType, stakeAmount);
                     emit ChainLiquidateEvent(liquidatedParty, liquidator, validator, tokenType, stakeAmount);
                 }
             }
@@ -96,10 +106,8 @@ contract ChainContract is Initializable, OwnableUpgradeable, IChain {
                 address tokenType = whitelistTokens[j];
                 uint256 stakeAmount = userStakes[user][deletedValidator][tokenType];
                 if (stakeAmount > 0) {
-                    userStakes[user][deletedValidator][tokenType] = 0;
-                    userStakes[user][newValidator][tokenType] += stakeAmount;
-                    validatorStakes[deletedValidator][tokenType] -= stakeAmount;
-                    validatorStakes[newValidator][tokenType] += stakeAmount;
+                    _unstakeToken(user, deletedValidator, tokenType, stakeAmount);
+                    _stakeToken(user, newValidator, tokenType, stakeAmount);
                     emit ChainMigrateEvent(user, deletedValidator, newValidator, tokenType, stakeAmount);
                 }
             }
