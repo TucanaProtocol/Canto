@@ -133,12 +133,40 @@ contract Intergate is Test {
         vm.startPrank(user2);
 
         BUSD.approve(address(router), 1 ether);
-
+        uint256 beforePoolSupply = pool.totalSupply(address(lpCollateral));
+        uint256 beforeUserSupply = pool.userSupply(address(lpCollateral), address(user2));
+        assertEq(beforePoolSupply, 0);
+        assertEq(beforeUserSupply, 0);
         router.swapAndSupply(address(BUSD), address(lpCollateral), 1 ether, validators[0]);
+        uint256 afterPoolSupply = pool.totalSupply(address(lpCollateral));
+        uint256 afterUserSupply = pool.userSupply(address(lpCollateral), address(user2));
+        assertEq(afterPoolSupply > 0 , true);
+        assertEq(afterUserSupply > 0 , true);
+    }
 
 
+    function test_withdrawAndDecreaseLiquidity() public {
+        vm.startPrank(user2);
+
+        BUSD.approve(address(router), 1 ether);
+        router.swapAndSupply(address(BUSD), address(lpCollateral), 1 ether, validators[0]);
         
 
+        uint256 beforePoolSupply = pool.totalSupply(address(lpCollateral));
+        uint256 beforeUserSupply = pool.userSupply(address(lpCollateral), address(user2));
+        uint256 usdtBalance = USDT.balanceOf(address(user2));
+
+        router.withdrawAndDecreaseLiquidity(address(lpCollateral), 0.1 ether,  validators[0]);
+        uint256 afterPoolSupply = pool.totalSupply(address(lpCollateral));
+        uint256 afterUserSupply = pool.userSupply(address(lpCollateral), address(user2));
+        uint256 afterUsdtBalance = USDT.balanceOf(address(user2));
+        assertEq(afterPoolSupply < beforePoolSupply , true);
+        assertEq(afterUserSupply < beforeUserSupply , true);
+        assertEq(afterUsdtBalance > usdtBalance , true);
+
+        
+        
+     
     }
 
 

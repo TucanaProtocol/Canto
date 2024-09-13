@@ -51,6 +51,34 @@ contract Router is Initializable {
 
     }
 
+
+    function withdrawAndDecreaseLiquidity(address _lpToken, uint256 _amount, address validator) external {
+        lend.pluginWithdraw(msg.sender, address(_lpToken), _amount, validator);
+
+          ITucanaStableSwapPool  swapPool = ITucanaStableSwapPool(ITucanaStableSwapLp(_lpToken).minter());
+
+          uint256 lpTokenAmount = IERC20Upgradeable(_lpToken).balanceOf(address(this));
+
+           if(swapPool.N_COINS() == 2){
+            uint256[2] memory fixedAmounts;
+            ITucanaStableSwapTwoPool(address(swapPool)).remove_liquidity(lpTokenAmount, fixedAmounts);
+        }else{
+            uint256[3] memory fixedAmounts;
+            ITucanaStableSwapThreePool(address(swapPool)).remove_liquidity(lpTokenAmount, fixedAmounts);
+        }
+
+        uint256 N_COINS = swapPool.N_COINS();
+        for (uint256 i = 0; i < N_COINS; i++) {
+            address coin = swapPool.coins(i);
+            uint256 balance = IERC20Upgradeable(coin).balanceOf(address(this));
+            if (balance > 0) {
+                IERC20Upgradeable(coin).transfer(msg.sender, balance);
+            }
+        }
+
+
+    }
+
     function getTokenIndex(address _token, ITucanaStableSwapPool _swapPool) public view returns (uint256) {
         uint256 N_COINS = _swapPool.N_COINS();
         for (uint256 i = 0; i < N_COINS; i++) {
