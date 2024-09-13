@@ -14,7 +14,7 @@ import "./interfaces/ITucanaStableSwapPool.sol";
 
 contract Router is Initializable {
      ILend public lend;
-
+    
      function initialize(
         address _lendAddress
     ) public initializer {
@@ -59,7 +59,7 @@ contract Router is Initializable {
 
           uint256 lpTokenAmount = IERC20Upgradeable(_lpToken).balanceOf(address(this));
 
-           if(swapPool.N_COINS() == 2){
+        if(swapPool.N_COINS() == 2){
             uint256[2] memory fixedAmounts;
             ITucanaStableSwapTwoPool(address(swapPool)).remove_liquidity(lpTokenAmount, fixedAmounts);
         }else{
