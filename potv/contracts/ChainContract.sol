@@ -100,6 +100,7 @@ contract ChainContract is Initializable, OwnableUpgradeable, IChain {
                     userStakes[user][newValidator][tokenType] += stakeAmount;
                     validatorStakes[deletedValidator][tokenType] -= stakeAmount;
                     validatorStakes[newValidator][tokenType] += stakeAmount;
+                    emit ChainMigrateEvent(user, deletedValidator, newValidator, tokenType, stakeAmount);
                 }
             }
             validatorStakedUsers[deletedValidator].remove(user);

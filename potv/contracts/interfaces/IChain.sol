@@ -21,4 +21,11 @@ interface IChain {
         address tokenType,
         uint256 amount
     );
+    event ChainMigrateEvent(
+        address indexed user,
+        address indexed deletedValidator,
+        address indexed newValidator,
+        address tokenType,
+        uint256 stakeAmount
+    );
 }
