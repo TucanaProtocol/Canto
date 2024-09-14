@@ -1,11 +1,11 @@
-# Becoming A Validator
+# Run A Tucana Fullnode
 
-**How to validate on the Canto Mainnet**
+**How to run a fullnode on the Tucana Testnet**
 
-*(canto_7700-1)*
+*(tucana_712-1)*
 
-> Genesis file [Published](https://github.com/Canto-Network/Canto/raw/main/Mainnet/genesis.json)
-> Peers list [Published](https://github.com/Canto-Network/Canto/blob/main/Mainnet/peers.txt)
+> Genesis file [Published](https://github.com/TucanaProtocol/Tucana/raw/tucana/develop/Networks/Testnet/tucana_712-1/genesis.json)
+> Peers list [Published](https://github.com/TucanaProtocol/Tucana/raw/tucana/develop/Networks/Testnet/tucana_712-1/peers.txt)
 
 ## Hardware Requirements
 
@@ -47,65 +47,37 @@ Or install individually:
 
 ## Install `tucd`
 
-### Clone git repository
+### Clone git repository and install
 
 ```bash
-git clone https://github.com/Canto-Network/Canto.git
-cd Canto/cmd/tucd
+git clone https://github.com/TucanaProtocol/Tucana.git
+cd Tucana/cmd/tucd
 go install -tags ledger ./...
 sudo mv $HOME/go/bin/tucd /usr/bin/
-
 ```
 
-### Generate and store keys
-
-Replace `<keyname>` below with whatever you'd like to name your key.
-
-*  `tucd keys add <key_name>`
-*  `tucd keys add <key_name> --recover` to regenerate keys with your mnemonic
-*  `tucd keys add <key_name> --ledger` to generate keys with ledger device
-
-Store a backup of your keys and mnemonic securely offline.
-
-Then save the generated public key config in the main Canto directory as `<key_name>.info`. It should look like this:
-
-```
-
-pubkey: {
-  "@type":" ethermint.crypto.v1.ethsecp256k1.PubKey",
-  "key":"############################################"
-}
-
-```
-
-You'll use this file later when creating your validator txn.
-
-## Set up validator
-
-Install tucd binary from `Canto` directory: 
-
-`sudo make install`
+## Set up fullnode
 
 Initialize the node. Replace `<moniker>` with whatever you'd like to name your validator.
 
-`tucd init <moniker> --chain-id canto_7700-1`
+`tucd init <moniker> --chain-id tucana_712-1`
 
 If this runs successfully, it should dump a blob of JSON to the terminal.
 
 Download the Genesis file: 
 
-`wget https://raw.githubusercontent.com/Canto-Network/Canto/genesis/Networks/Mainnet/genesis.json -P $HOME/.tucd/config/` 
+`wget https://github.com/TucanaProtocol/Tucana/raw/tucana/develop/Networks/Testnet/tucana_712-1/genesis.json -P $HOME/.tucd/config/` 
 
 > _**Note:** If you later get `Error: couldn't read GenesisDoc file: open /root/.tucd/config/genesis.json: no such file or directory` put the genesis.json file wherever it wants instead, such as:
 > 
-> `sudo wget https://github.com/Canto-Network/Canto/raw/main/Mainnet/genesis.json -P/root/.tucd/config/`
+> `sudo wget https://github.com/TucanaProtocol/Tucana/raw/tucana/develop/Networks/Testnet/tucana_712-1/genesis.json -P/root/.tucd/config/`
 
 Edit the minimum-gas-prices in `${HOME}/.tucd/config/app.toml`:
 
-`sed -i 's/minimum-gas-prices = "0acanto"/minimum-gas-prices = "0.0001acanto"/g' $HOME/.tucd/config/app.toml`
+`sed -i 's/minimum-gas-prices = "0atuc"/minimum-gas-prices = "1000000000atuc"/g' $HOME/.tucd/config/app.toml`
 
-Add persistent peers to `$HOME/.tucd/config/config.toml`:
-`sed -i 's/persistent_peers = ""/persistent_peers = "ec770ae4fd0fb4871b9a7c09f61764a0b010b293@164.90.134.106:26656"/g' $HOME/.tucd/config/config.toml`
+Add seeds to `$HOME/.tucd/config/config.toml`:
+`sed -i 's/seeds = ""/seeds = "c12dbad41880b077207c92a2b12a1ae1301c5ceb@54.87.220.124:26656,998cae4ace4f646fbd18ad24504d7b0d10d0a772@52.4.39.41:26656"/g' $HOME/.tucd/config/config.toml`
 
 ### Set `tucd` to run automatically
 
@@ -114,25 +86,22 @@ Add persistent peers to `$HOME/.tucd/config/config.toml`:
 * Then copy and paste the following text into your service file. Be sure to edit as you see fit.
 
 ```bash
-
 [Unit]
-Description=Canto Node
+Description=Tucana Node
 After=network.target
 
 [Service]
 Type=simple
 User=root
 WorkingDirectory=/root/
-ExecStart=/root/go/bin/tucd start --trace --log_level info --json-rpc.api eth,txpool,net,debug,web3 --api.enable
+ExecStart=/root/go/bin/tucd start --chain-id tucana_712-1
 Restart=on-failure
 StartLimitInterval=0
 RestartSec=3
 LimitNOFILE=65535
-LimitMEMLOCK=209715200
 
 [Install]
 WantedBy=multi-user.target
-
 ```
 
 ## Start the node
@@ -141,44 +110,10 @@ Reload the service files:
 
 `sudo systemctl daemon-reload`
 
-Create the symlinlk: 
+Create the symlink: 
 
 `sudo systemctl enable tucd.service`
 
 Start the node: 
 
 `sudo systemctl start tucd && journalctl -u tucd -f`
-
-You should then get several lines of log files and then see: `No addresses to dial. Falling back to seeds module=pex server=node`
-
-This is an indicator things thus far are working and now you need to create your validator txn. `^c` out and follow the next steps.
-
-### Create Validator Transaction
-
-Modify the following items below, removing the `<>`
-
-- `<KEY_NAME>` should be the same as `<key_name>` when you followed the steps above in creating or restoring your key.
-- `<VALIDATOR_NAME>` is whatever you'd like to name your node
-- `<DESCRIPTION>` is whatever you'd like in the description field for your node
-- `<SECURITY_CONTACT_EMAIL>` is the email you want to use in the event of a security incident
-- `<YOUR_WEBSITE>` the website you want associated with your node
-- `<TOKEN_DELEGATION>` is the amount of tokens staked by your node (`1acanto` should work here, but you'll also need to make sure your address contains tokens.)
-
-```bash
-
-tucd tx staking create-validator \
---from <KEY_NAME> \
---chain-id canto_7700-1 \
---moniker="<VALIDATOR_NAME>" \
---commission-max-change-rate=0.01 \
---commission-max-rate=1.0 \
---commission-rate=0.05 \
---details="<DESCRIPTION>" \
---security-contact="<SECURITY_CONTACT_EMAIL>" \
---website="<YOUR_WEBSITE>" \
---pubkey $(tucd tendermint show-validator) \
---min-self-delegation="1" \
---amount <TOKEN_DELEGATION>acanto \
---fees 20acanto
-
-```
