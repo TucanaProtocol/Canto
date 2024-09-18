@@ -195,7 +195,6 @@ contract Lend is Initializable, OwnableUpgradeable, PausableUpgradeable, ILend {
         uint256 repayAmount = pool.getUserTotalBorrow(liquidatedUser);
         pool.repayUSD(msg.sender, liquidatedUser, repayAmount);
         pool.liquidateTokens(liquidatedUser, msg.sender);
-        chain.liquidatePosition(msg.sender, liquidatedUser);
         emit LiquidateEvent(msg.sender, liquidatedUser, repayAmount);
     }
 
@@ -229,17 +228,8 @@ contract Lend is Initializable, OwnableUpgradeable, PausableUpgradeable, ILend {
      **/
     function migrateStakes(address deletedValidator, address newValidator) external onlyOwner whenNotPaused {
         require(chain.containsValidator(deletedValidator), "Lend: Invalid validator");
-        uint256 migrateStakeLimit = chain.getMigrateStakeLimit();
 
-        address[] memory validatorStakedUsers = chain.getValidatorStakedUsers(deletedValidator);
-        uint256 deleteAmount = validatorStakedUsers.length <= migrateStakeLimit ? validatorStakedUsers.length : migrateStakeLimit;
-        
-        for (uint256 i = 0; i < deleteAmount; i++) {
-            address userAddress = validatorStakedUsers[i];
-            reward.updateReward(userAddress);
-        }
-        
-        chain.migrateStakes(deletedValidator, newValidator, deleteAmount);
+        chain.migrateStakes(deletedValidator, newValidator);
     }
 
     /**
@@ -389,7 +379,6 @@ contract Lend is Initializable, OwnableUpgradeable, PausableUpgradeable, ILend {
      */
     function _increaseAndStake(address user, address tokenType, uint256 amount, address validator) internal {
         pool.increasePoolToken(user, tokenType, amount);
-        chain.stakeToken(user, validator, tokenType, amount);
     }
 
     /**
@@ -402,6 +391,5 @@ contract Lend is Initializable, OwnableUpgradeable, PausableUpgradeable, ILend {
      */
     function _decreaseAndUnstake(address user, address receiver, address tokenType, uint256 amount, address validator) internal {
         pool.decreasePoolToken(user, receiver, tokenType, amount);
-        chain.unstakeToken(user, validator, tokenType, amount);
     }
 }
