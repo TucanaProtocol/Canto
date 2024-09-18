@@ -24,6 +24,14 @@ async function main() {
     const tx1 = await lend.withdraw(ContractAdds.Collateral_1, ethers.parseEther('1'), validator1);
     await tx1.wait();
     console.log("withdraw successful", tx1.hash);
+
+    const tx3 = await lend.borrow(ethers.parseEther('2'));
+    await tx3.wait();
+    console.log("borrow successful",tx3.hash);
+
+    const tx4 = await lend.repay(ethers.parseEther('1'));
+    await tx4.wait();
+    console.log("repay successful",tx4.hash);
 }
 
 // We recommend this pattern to be able to use async/await everywhere
