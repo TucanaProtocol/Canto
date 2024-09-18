@@ -17,11 +17,8 @@ async function main() {
     await tx.wait();
     console.log("Supply successful", tx.hash);
 
-
-    const validator1 = config.validators[0];
-    const lend = await ethers.getContractAt("Lend", ContractAdds.Lend);
-    const tx = await lend.supply(ContractAdds.Collateral_1, ethers.parseEther('10'), validator1);
-    await tx.wait();
+    const tx2 = await lend.supply(ContractAdds.Collateral_1, ethers.parseEther('10'), validator1);
+    await tx2.wait();
     console.log("Supply successful", tx.hash);
 
     const tx1 = await lend.withdraw(ContractAdds.Collateral_1, ethers.parseEther('1'), validator1);
