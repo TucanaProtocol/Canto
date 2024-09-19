@@ -14,3 +14,4 @@ typechain-types
 out
 cache_forge
 /potv/extracted_tuc_addresses.txt
+/potv/go-bindings/
