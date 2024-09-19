@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.19;
+
 interface IPriceFeed {
     function setTokenPrices(address[] memory tokens, int256[] memory prices) external;
     function latestAnswer(address token) external view returns (uint256);
