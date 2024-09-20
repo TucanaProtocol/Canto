@@ -39,9 +39,9 @@ for contract in "$CONTRACTS_DIR"/*.sol; do
             rm "$GO_BINDINGS_DIR/$contract_name.go"
         fi
 
-        # Generate Go binding files using abigen with fixed package name 'go_bindings'
+        # Generate Go binding files using abigen with unique type names for each contract
         abigen --bin="$BUILD_DIR/$contract_name.bin" --abi="$BUILD_DIR/$contract_name.abi" \
-               --pkg="go_bindings" --out="$GO_BINDINGS_DIR/$contract_name.go"
+               --pkg="go_bindings" --type="${contract_name}Binding" --out="$GO_BINDINGS_DIR/$contract_name.go"
         echo "Go binding file for $contract_name has been generated."
     else
         echo "Error: Failed to generate ABI or BIN files for $contract_name."
