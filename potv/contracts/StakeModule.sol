@@ -17,22 +17,27 @@ import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 contract StakeModule is Initializable, OwnableUpgradeable, PausableUpgradeable {
 
         using SafeERC20 for IERC20;
+        using EnumerableSet for EnumerableSet.AddressSet;
         IConfig public config;
         IChain public chain;      
         IStakePool public stakePool;
+        IReward public reward;
         //lp address => lprt address
         mapping(address => address) public lpTokenToLPRT;
+        // Set to store all LPRT addresses
+        EnumerableSet.AddressSet private lprtTokens;
 
-        function initialize(address _configAddress, address _chainAddress, address _stakePoolAddress) public initializer {
+        function initialize(address _configAddress, address _chainAddress, address _stakePoolAddress, address _rewardAddress) public initializer {
             __Ownable_init();
             __Pausable_init();
             config = IConfig(_configAddress);
             chain = IChain(_chainAddress);
             stakePool = IStakePool(_stakePoolAddress);
+            reward = IReward(_rewardAddress);
         }
 
         function stake(address _lpToken, address _validator, uint256 _amount) external {
@@ -41,8 +46,9 @@ contract StakeModule is Initializable, OwnableUpgradeable, PausableUpgradeable {
             stakePool.stakeToStakePool(_lpToken, _amount);
             chain.stakeToken(_validator, _lpToken, _amount);
             if(lpTokenToLPRT[_lpToken] == address(0)){
-                LPRT lprt = new LPRT(_lpToken, address(this));
+                LPRT lprt = new LPRT(_lpToken, address(this), address(reward));
                 lpTokenToLPRT[_lpToken] = address(lprt);
+                lprtTokens.add(address(lprt));
             }
             ILPRT(lpTokenToLPRT[_lpToken]).mint(msg.sender, _amount);
         }
@@ -52,6 +58,10 @@ contract StakeModule is Initializable, OwnableUpgradeable, PausableUpgradeable {
             ILPRT(lpTokenToLPRT[_lpToken]).burn(msg.sender, _amount);
             stakePool.unstakeFromStakePool(msg.sender, _lpToken, _amount);
             chain.unstakeToken(_validator, _lpToken, _amount);
+        }
+
+        function containsLPRT(address _lprtToken) external view returns (bool) {
+            return lprtTokens.contains(_lprtToken);
         }
 
     

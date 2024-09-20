@@ -14,7 +14,7 @@ contract ChainContract is Initializable, OwnableUpgradeable, IChain {
     uint256 public constant MIGRATE_STAKE_LIMIT = 500;
 
     IConfig public config;
-    address public lendContract;
+    address public stakeModule;
 
     EnumerableSet.AddressSet private validators;
     mapping(address => mapping(address => uint256)) private validatorStakes;
@@ -25,13 +25,13 @@ contract ChainContract is Initializable, OwnableUpgradeable, IChain {
         config = IConfig(_configAddress);
     }
 
-    modifier onlyLend() {
-        require(msg.sender == lendContract, "ChainContract: Only Lend contract can call this function");
+    modifier onlyStakeModule() {
+        require(msg.sender == stakeModule, "ChainContract: Only stakeModule can call this function");
         _;
     }
 
-    function setLendContract(address _lendContract) external onlyOwner {
-        lendContract = _lendContract;
+    function setStakeModule(address _stakeModule) external onlyOwner {
+        stakeModule = _stakeModule;
     }
 
     function setValidators(address[] memory newValidators) external onlyOwner {
@@ -43,7 +43,7 @@ contract ChainContract is Initializable, OwnableUpgradeable, IChain {
         }
     }
 
-    function stakeToken( address validator, address tokenType, uint256 amount) external onlyLend {
+    function stakeToken( address validator, address tokenType, uint256 amount) external onlyStakeModule {
         require(validators.contains(validator), "ChainContract: Invalid validator");
         _stakeToken(validator, tokenType, amount);
     }
@@ -55,7 +55,7 @@ contract ChainContract is Initializable, OwnableUpgradeable, IChain {
     }
 
 
-    function unstakeToken(address validator, address tokenType, uint256 amount) external onlyLend {
+    function unstakeToken(address validator, address tokenType, uint256 amount) external onlyStakeModule {
         require(validatorStakes[validator][tokenType] >= amount, "ChainContract: Insufficient stake");
         _unstakeToken(validator, tokenType, amount);
     }
@@ -67,7 +67,7 @@ contract ChainContract is Initializable, OwnableUpgradeable, IChain {
     }
 
    
-    function migrateStakes(address deletedValidator, address newValidator) external onlyLend {
+    function migrateStakes(address deletedValidator, address newValidator) external onlyStakeModule {
         if (!validators.contains(newValidator)) {
             validators.add(newValidator);
         }

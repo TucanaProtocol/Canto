@@ -8,6 +8,8 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "./interfaces/IConfig.sol";
 import "./interfaces/IPool.sol";
 import "./interfaces/IReward.sol";
+import "./interfaces/ILPRT.sol";
+import "./interfaces/IStakeModule.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 contract Reward is Initializable, OwnableUpgradeable, IReward {
@@ -24,12 +26,11 @@ contract Reward is Initializable, OwnableUpgradeable, IReward {
     mapping(address => mapping(address => uint256)) private rewards;
     IConfig public config;
     IPool public pool;
-    address public lendAddress;
-
+    IStakeModule public stakeModule;
     /// @notice Modifier to restrict function access to only the lend contract
     /// @dev Reverts if the caller is not the lend contract
-    modifier onlyLend() {
-        require(msg.sender == lendAddress, "Reward: Only lend contract can call this function");
+    modifier onlyStakeModule() {
+        require(msg.sender == address(stakeModule), "Reward: Only stake module can call this function");
         _;
     }
 
@@ -37,19 +38,37 @@ contract Reward is Initializable, OwnableUpgradeable, IReward {
     /// @param _configAddress Address of the config contract
     /// @param _poolAddress Address of the pool contract
     /// @dev This function can only be called once due to the initializer modifier
-    function initialize(address _configAddress, address _poolAddress) public initializer {
+    function initialize(address _configAddress, address _poolAddress, address _stakeModuleAddress) public initializer {
         __Ownable_init();
         config = IConfig(_configAddress);
         pool = IPool(_poolAddress);
+        stakeModule = IStakeModule(_stakeModuleAddress);
     }
     
-    /// @notice Sets the lend contract address
-    /// @param _lendAddress Address of the lend contract
-    /// @dev Can only be called by the contract owner
-    function setLendContract(address _lendAddress) external onlyOwner {
-        lendAddress = _lendAddress;
+
+    function setStakeModule(address _stakeModuleAddress) external onlyOwner {
+        stakeModule = IStakeModule(_stakeModuleAddress);
     }
 
+
+    function handleAction(address user,  uint256 userBalance) external  {
+        require(stakeModule.containsLPRT(msg.sender), "Reward: Only LPRT tokens can call this function");
+        _updateData(msg.sender, user, userBalance);
+    }
+
+    function _updateData(address asset, address user, uint256 userBalance) internal {
+        address lpToken = ILPRT(asset).underlyingAsset();
+        require(config.isWhitelistToken(lpToken), "Reward: LP token is not whitelisted");
+        for (uint256 i = 0; i < rewardTokens.length(); i++) {
+            address rewardToken = rewardTokens.at(i);
+            uint256 rewardPerToken = getRewardPerTokenStored(rewardToken, lpToken);
+            uint256 userRewardPaid = getUserRewardPaid(user, rewardToken, lpToken);
+            uint256 earnedAmount = (userBalance * (rewardPerToken - userRewardPaid)) / (10**config.getPrecision());
+            rewards[user][rewardToken] += earnedAmount;
+
+            updateUserRewardPerTokenPaid(user, rewardToken, lpToken);
+        }
+    }
     /// @notice Updates the reward for a specific user
     /// @param user Address of the user to update rewards for
     /// @dev Calculates and stores earned rewards, updates user reward per token paid
