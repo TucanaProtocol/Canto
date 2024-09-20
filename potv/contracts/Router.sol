@@ -6,37 +6,94 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeab
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import "./interfaces/ITucanaStableSwapLp.sol";
+import "./interfaces/ITucanaStableSwapThreePool.sol";
+import "./interfaces/ITucanaStableSwapTwoPool.sol";
+import "./interfaces/ITucanaStableSwapPool.sol";
 
-//TODO
-import "./test/TestSwapRouter.sol";
+
 contract Router is Initializable {
      ILend public lend;
-     TestSwapRouter public testSwapRouter;
+    
      function initialize(
-        address _lendAddress,
-        address _testSwapRouterAddress
-
+        address _lendAddress
     ) public initializer {
         lend = ILend(_lendAddress);
-        testSwapRouter = TestSwapRouter(_testSwapRouterAddress);
     }
-    function swapAndSupply(address _fromToken, uint256 _amount, address validator) external {
-        // Swap tokens
+
+    function swapAndSupply(address _fromToken, address _lpToken, uint256 _amount, address validator) external {
+        ITucanaStableSwapPool  swapPool = ITucanaStableSwapPool(ITucanaStableSwapLp(_lpToken).minter());
+        uint256[] memory amounts = getAddLiquidityArray(_fromToken, swapPool, _amount);
+        //transfer from user to router
         IERC20Upgradeable(_fromToken).transferFrom(msg.sender, address(this), _amount);
+        IERC20Upgradeable(_fromToken).approve(address(swapPool), _amount);
+    
 
-        IERC20Upgradeable(_fromToken).approve(address(testSwapRouter), _amount);
-        uint256 swappedAmount = testSwapRouter.swap(_fromToken, _amount);
-        // Supply tokens
-        IERC20Upgradeable(address(testSwapRouter)).approve(address(lend), swappedAmount);
-        
-        lend.pluginSupply(msg.sender, address(testSwapRouter), swappedAmount, validator);
+        if(swapPool.N_COINS() == 2){
+            uint256[2] memory fixedAmounts;
+            for (uint256 i = 0; i < 2; i++) {
+                fixedAmounts[i] = amounts[i];
+            }
+            ITucanaStableSwapTwoPool(address(swapPool)).add_liquidity(fixedAmounts, 0);
+        }else{
+            uint256[3] memory fixedAmounts;
+            for (uint256 i = 0; i < 3; i++) {
+                fixedAmounts[i] = amounts[i];
+            }
+            ITucanaStableSwapThreePool(address(swapPool)).add_liquidity(fixedAmounts, 0);
+        }
+
+
+        //supply to lend
+        uint256 lpTokenAmount = IERC20Upgradeable(_lpToken).balanceOf(address(this));
+        IERC20Upgradeable(_lpToken).approve(address(lend), lpTokenAmount);
+        lend.pluginSupply(msg.sender, address(_lpToken), lpTokenAmount, validator);
 
     }
 
-    function withdrawAndSwap(address _token, uint256 _amount, address validator) external {
-        // Withdraw tokens
-        lend.pluginWithdraw(msg.sender, _token, _amount, validator);
-        // Swap tokens
-        testSwapRouter.approve(_token, _amount);
+
+    function withdrawAndDecreaseLiquidity(address _lpToken, uint256 _amount, address validator) external {
+        lend.pluginWithdraw(msg.sender, address(_lpToken), _amount, validator);
+
+          ITucanaStableSwapPool  swapPool = ITucanaStableSwapPool(ITucanaStableSwapLp(_lpToken).minter());
+
+          uint256 lpTokenAmount = IERC20Upgradeable(_lpToken).balanceOf(address(this));
+
+        if(swapPool.N_COINS() == 2){
+            uint256[2] memory fixedAmounts;
+            ITucanaStableSwapTwoPool(address(swapPool)).remove_liquidity(lpTokenAmount, fixedAmounts);
+        }else{
+            uint256[3] memory fixedAmounts;
+            ITucanaStableSwapThreePool(address(swapPool)).remove_liquidity(lpTokenAmount, fixedAmounts);
+        }
+
+        uint256 N_COINS = swapPool.N_COINS();
+        for (uint256 i = 0; i < N_COINS; i++) {
+            address coin = swapPool.coins(i);
+            uint256 balance = IERC20Upgradeable(coin).balanceOf(address(this));
+            if (balance > 0) {
+                IERC20Upgradeable(coin).transfer(msg.sender, balance);
+            }
+        }
+
+
     }
+
+    function getTokenIndex(address _token, ITucanaStableSwapPool _swapPool) public view returns (uint256) {
+        uint256 N_COINS = _swapPool.N_COINS();
+        for (uint256 i = 0; i < N_COINS; i++) {
+            if (_swapPool.coins(i) == _token) {
+                return i;
+            }
+        }
+    }
+
+    function getAddLiquidityArray(address _token, ITucanaStableSwapPool _swapPool, uint256 _amount) public view returns (uint256[] memory) {
+        uint256 tokenIndex = getTokenIndex(_token, _swapPool);
+        uint256[] memory amounts = new uint256[](_swapPool.N_COINS());
+        amounts[tokenIndex] = _amount;
+        return amounts;
+    }
+
+  
 }

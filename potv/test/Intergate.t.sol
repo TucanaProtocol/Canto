@@ -24,20 +24,32 @@ contract Intergate is Test {
     TUCUSD public usd;
     MockToken public collateral1;
     MockToken public collateral2;
+    MockToken public lpCollateral;
     MockToken public fakeCollateral;
     MockToken public rewardToken;
     MockToken public rewardToken2;
+
+
+
+    MockToken public BUSD;
+    MockToken public USDT;
+    MockToken public USDC;
 
     address public owner;
     address public user1;
     address public user2;
     address[] public validators;
-    TestSwapRouter public testSwapRouter;
+
     Router public router;
     function setUp() public {
+        BUSD = MockToken(0xFb20C17FB27CCe807FbCF045ceAd35fb76C883Ae);
+        USDT = MockToken(0x3AE3e67E6DdA0bD1DdDe2c248Cd4e12542B27954);
+        USDC = MockToken(0x34de463470f4611dF5b02245a6e96e3e3872058e);
+        lpCollateral = MockToken(0x1fA3Fa83f450Cd4ACA24746F2A2103Ab40E84B46);
+
         owner = address(this);
         user1 = address(0x1);
-        user2 = address(0x2);
+        user2 = address(0x330BD48140Cf1796e3795A6b374a673D7a4461d0);
         validators = new address[](2);
         validators[0] = address(0x3);
         validators[1] = address(0x4);
@@ -81,13 +93,13 @@ contract Intergate is Test {
         fakeCollateral.mint(user2, 1000000 ether);
 
 
-        testSwapRouter = new TestSwapRouter();
+
 
         //set price
         address[] memory tokenAddresses = new address[](3);
         tokenAddresses[0] = address(collateral1);
         tokenAddresses[1] = address(collateral2);
-        tokenAddresses[2] = address(fakeCollateral);
+        tokenAddresses[2] = address(lpCollateral);
         uint256[] memory tokenPrices = new uint256[](3);
         tokenPrices[0] = 1000000;
         tokenPrices[1] = 1000000;
@@ -98,7 +110,7 @@ contract Intergate is Test {
         //add collateral
         config.addCollateral(address(collateral1));
         config.addCollateral(address(collateral2));
-        config.addCollateral(address(testSwapRouter));
+        config.addCollateral(address(lpCollateral));
         //set validators
         chainContract.setValidators(validators);
 
@@ -108,30 +120,130 @@ contract Intergate is Test {
 
         pool.setUsdAddress(address(usd));
         usd.setPool(address(pool));
-
-
-    
         
-
-
         router = new Router();
 
-        router.initialize(address(lend), address(testSwapRouter));
+        router.initialize(address(lend));
 
         lend.setPlugin(address(router), true);
         
     }
 
     function test_swapAndSupply() public {
-        vm.startPrank(user1);
+        vm.startPrank(user2);
 
-        collateral1.approve(address(router), 1 ether);
-        router.swapAndSupply(address(collateral1), 1 ether, validators[0]);
+        BUSD.approve(address(router), 1 ether);
+        uint256 beforePoolSupply = pool.totalSupply(address(lpCollateral));
+        uint256 beforeUserSupply = pool.userSupply(address(lpCollateral), address(user2));
+        assertEq(beforePoolSupply, 0);
+        assertEq(beforeUserSupply, 0);
+        router.swapAndSupply(address(BUSD), address(lpCollateral), 1 ether, validators[0]);
+        uint256 afterPoolSupply = pool.totalSupply(address(lpCollateral));
+        uint256 afterUserSupply = pool.userSupply(address(lpCollateral), address(user2));
+        assertEq(afterPoolSupply > 0 , true);
+        assertEq(afterUserSupply > 0 , true);
+    }
 
-        assertEq(pool.totalSupply(address(testSwapRouter)), 1 ether);
-        assertEq(pool.userSupply(address(testSwapRouter), user1), 1 ether);
+
+    function test_withdrawAndDecreaseLiquidity() public {
+        vm.startPrank(user2);
+
+        BUSD.approve(address(router), 1 ether);
+        router.swapAndSupply(address(BUSD), address(lpCollateral), 1 ether, validators[0]);
+        
+
+        uint256 beforePoolSupply = pool.totalSupply(address(lpCollateral));
+        uint256 beforeUserSupply = pool.userSupply(address(lpCollateral), address(user2));
+        uint256 usdtBalance = USDT.balanceOf(address(user2));
+
+        router.withdrawAndDecreaseLiquidity(address(lpCollateral), 0.1 ether,  validators[0]);
+        uint256 afterPoolSupply = pool.totalSupply(address(lpCollateral));
+        uint256 afterUserSupply = pool.userSupply(address(lpCollateral), address(user2));
+        uint256 afterUsdtBalance = USDT.balanceOf(address(user2));
+        assertEq(afterPoolSupply < beforePoolSupply , true);
+        assertEq(afterUserSupply < beforeUserSupply , true);
+        assertEq(afterUsdtBalance > usdtBalance , true);
 
     }
 
+
+    function test_swapAndSupplyWithReward() public {
+       
+        vm.startPrank(user2);
+        BUSD.approve(address(router), 1 ether);
+        router.swapAndSupply(address(BUSD), address(lpCollateral), 1 ether, validators[0]);
+        
+
+
+
+        //distribute reward
+         // Setup reward distribution parameters
+        address[] memory rewardTokens = new address[](1);
+        rewardTokens[0] = address(rewardToken);
+        
+        address[] memory lpTokens = new address[](1);
+        lpTokens[0] = address(lpCollateral);
+        
+        uint256[][] memory rewardAmounts = new uint256[][](1);
+        rewardAmounts[0] = new uint256[](1);
+        rewardAmounts[0][0] = 1000 ether; // 1000 tokens as reward
+        
+        // Distribute rewards
+        vm.startPrank(owner);
+        rewardToken.mint(owner, 1000 ether);
+        rewardToken.approve(address(reward), 1000 ether);
+        reward.distributeReward(rewardTokens, lpTokens, rewardAmounts);
+        
+
+
+        
+        // Check claimable rewards
+        assertEq(reward.claimableReward(user2, address(rewardToken)) > 0, true, "User2 should have claimable rewards");
+        
+        // User claims rewards
+        vm.startPrank(user2);
+        reward.claimReward(address(rewardToken));
+        
+        // Verify rewards were transferred
+        assertEq(rewardToken.balanceOf(user2) > 0, true, "User2 should have received reward tokens");
+    }
+    
+    function test_withdrawAndDecreaseLiquidityWithReward() public {
+       
+        
+        vm.startPrank(user2);
+        BUSD.approve(address(router), 1 ether);
+        router.swapAndSupply(address(BUSD), address(lpCollateral), 1 ether, validators[0]);
+        
+         // Setup reward distribution parameters
+        address[] memory rewardTokens = new address[](1);
+        rewardTokens[0] = address(rewardToken);
+        
+        address[] memory lpTokens = new address[](1);
+        lpTokens[0] = address(lpCollateral);
+        
+        uint256[][] memory rewardAmounts = new uint256[][](1);
+        rewardAmounts[0] = new uint256[](1);
+        rewardAmounts[0][0] = 1000 ether; // 1000 tokens as reward
+        
+        // Distribute rewards 
+        vm.startPrank(owner);
+        rewardToken.mint(owner, 1000 ether);
+        rewardToken.approve(address(reward), 1000 ether);
+        reward.distributeReward(rewardTokens, lpTokens, rewardAmounts);
+
+        vm.startPrank(user2);
+        // Withdraw and decrease liquidity
+        router.withdrawAndDecreaseLiquidity(address(lpCollateral), 0.1 ether, validators[0]);
+        
+        // Check claimable rewards
+        assertEq(reward.claimableReward(user2, address(rewardToken)) > 0, true, "User2 should have claimable rewards");
+        
+        // User claims rewards
+        reward.claimReward(address(rewardToken));
+        
+        // Verify rewards were transferred
+        assertEq(rewardToken.balanceOf(user2) > 0, true, "User2 should have received reward tokens");
+    }
 
 }
