@@ -33,14 +33,14 @@ contract StakePool is Initializable, OwnableUpgradeable, IStakePool {
      function stakeToStakePool(address _lpToken, uint256 _amount) external onlyStakeModule {
         require(config.isWhitelistToken(_lpToken), "Pool: Not a whitelisted token");
         stakeAmount[_lpToken] += _amount;
-        emit StakeToStakePool(_lpToken, _amount);
+        emit StakeToStakePool(msg.sender, _lpToken, _amount);
      }
 
      function unstakeFromStakePool(address receiver, address _lpToken, uint256 _amount) external onlyStakeModule {
         require(stakeAmount[_lpToken] >= _amount, "Pool: Not enough staked amount");
         IERC20Upgradeable(_lpToken).safeTransfer(receiver, _amount);
         stakeAmount[_lpToken] -= _amount;
-        emit UnstakeFromStakePool(receiver, _lpToken, _amount);
+        emit UnstakeFromStakePool(msg.sender, receiver, _lpToken, _amount);
      }
 
 
