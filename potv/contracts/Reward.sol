@@ -6,10 +6,11 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeab
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "./interfaces/IConfig.sol";
-import "./interfaces/IPool.sol";
+
 import "./interfaces/IReward.sol";
 import "./interfaces/ILPRT.sol";
 import "./interfaces/IStakeModule.sol";
+import "./interfaces/IStakePool.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 contract Reward is Initializable, OwnableUpgradeable, IReward {
@@ -18,14 +19,14 @@ contract Reward is Initializable, OwnableUpgradeable, IReward {
 
     EnumerableSet.AddressSet private rewardTokens;
     //rewardToken => lpToken => amount
-    mapping(address => mapping(address => uint256)) private rewardPerTokenStored;
+    mapping(address => mapping(address => uint256)) public rewardPerTokenStored;
     //user => rewardToken => lpToken => amount
     mapping(address => mapping(address => mapping(address => uint256))) private userRewardPerTokenPaid;
 
     //user => rewardToken => amount
     mapping(address => mapping(address => uint256)) private rewards;
     IConfig public config;
-    IPool public pool;
+    IStakePool public stakePool;
     IStakeModule public stakeModule;
     /// @notice Modifier to restrict function access to only the lend contract
     /// @dev Reverts if the caller is not the lend contract
@@ -36,12 +37,12 @@ contract Reward is Initializable, OwnableUpgradeable, IReward {
 
     /// @notice Initializes the contract with configuration and pool addresses
     /// @param _configAddress Address of the config contract
-    /// @param _poolAddress Address of the pool contract
+    /// @param _stakePoolAddress Address of the stake pool contract
     /// @dev This function can only be called once due to the initializer modifier
-    function initialize(address _configAddress, address _poolAddress, address _stakeModuleAddress) public initializer {
+    function initialize(address _configAddress, address _stakePoolAddress, address _stakeModuleAddress) public initializer {
         __Ownable_init();
         config = IConfig(_configAddress);
-        pool = IPool(_poolAddress);
+        stakePool = IStakePool(_stakePoolAddress);
         stakeModule = IStakeModule(_stakeModuleAddress);
     }
     
@@ -61,11 +62,8 @@ contract Reward is Initializable, OwnableUpgradeable, IReward {
         require(config.isWhitelistToken(lpToken), "Reward: LP token is not whitelisted");
         for (uint256 i = 0; i < rewardTokens.length(); i++) {
             address rewardToken = rewardTokens.at(i);
-            uint256 rewardPerToken = getRewardPerTokenStored(rewardToken, lpToken);
-            uint256 userRewardPaid = getUserRewardPaid(user, rewardToken, lpToken);
-            uint256 earnedAmount = (userBalance * (rewardPerToken - userRewardPaid)) / (10**config.getPrecision());
+            uint256 earnedAmount = earned(user, rewardToken);
             rewards[user][rewardToken] += earnedAmount;
-
             updateUserRewardPerTokenPaid(user, rewardToken, lpToken);
         }
     }
@@ -95,7 +93,9 @@ contract Reward is Initializable, OwnableUpgradeable, IReward {
         address[] memory lpTokens = config.getAllWhitelistTokens();
         for (uint256 i = 0; i < lpTokens.length; i++) {
             address lpToken = lpTokens[i];
-            uint256 userTokenSupply = pool.getUserTokenSupply(user, lpToken);
+            address lprtToken = stakeModule.lpTokenToLPRT(lpToken);
+            if(lprtToken == address(0)) continue;
+            uint256 userTokenSupply = IERC20Upgradeable(lprtToken).balanceOf(user);
             uint256 rewardPerToken = getRewardPerTokenStored(rewardToken, lpToken);
             uint256 userRewardPaid = getUserRewardPaid(user, rewardToken, lpToken);
             totalEarned += (userTokenSupply * (rewardPerToken - userRewardPaid)) / (10**config.getPrecision());
@@ -144,7 +144,7 @@ contract Reward is Initializable, OwnableUpgradeable, IReward {
             for (uint256 j = 0; j < _lpTokens.length; j++) {
                 uint256 rewardAmount = _rewardAmounts[i][j];
                 address lpToken = _lpTokens[j];
-                uint256 totalTokenSupply = pool.totalSupply(lpToken);
+                uint256 totalTokenSupply = stakePool.stakeAmount(lpToken);
                 if (totalTokenSupply == 0) continue;
 
                 uint256 perTokenRewardIncrease = (rewardAmount * (10**config.getPrecision())) / totalTokenSupply;

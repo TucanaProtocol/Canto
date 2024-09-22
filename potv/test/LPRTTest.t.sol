@@ -74,7 +74,7 @@ contract LPRTTest is Test {
         stakePool.initialize(address(stakeModule), address(config));
 
         
-        reward.initialize(address(config), address(pool), address(stakeModule));
+        reward.initialize(address(config), address(stakePool), address(stakeModule));
         
         lend = new Lend();
         lend.initialize(address(chainContract), address(pool), address(config), address(reward), address(priceFeed), address(usd));
@@ -121,9 +121,49 @@ contract LPRTTest is Test {
         }
 
         function test_lprt() public {
-            vm.startPrank(user1);
-            collateral1.approve(address(stakeModule), 1 ether);
-            stakeModule.stake(address(collateral1), validators[0], 1 ether);
+        vm.startPrank(user1);
+        collateral1.approve(address(stakeModule), 1 ether);
+        stakeModule.stake(address(collateral1), validators[0], 1 ether);
+
+
+        address lprtToken = stakeModule.lpTokenToLPRT(address(collateral1));
+        uint256 userLprtBalance = IERC20(lprtToken).balanceOf(user1);
+        console.log("userLprtBalance", userLprtBalance);
+
+        vm.startPrank(owner);
+
+        address[] memory rewardTokens = new address[](2);
+
+        rewardTokens[0] = address(rewardToken);
+        rewardTokens[1] = address(rewardToken2);
+        
+        address[] memory lpTokens = new address[](1);
+        lpTokens[0] = address(collateral1);
+
+        uint256[][] memory rewardAmounts = new uint256[][](2);
+        rewardAmounts[0] = new uint256[](1);
+        rewardAmounts[0][0] = 1000 ether; // 1000 tokens as reward
+        
+        rewardAmounts[1] = new uint256[](1);
+        rewardAmounts[1][0] = 1000 ether; // 1000 tokens as reward
+
+        rewardToken.mint(owner, 1000 ether);
+        rewardToken2.mint(owner, 1000 ether);
+        rewardToken.approve(address(reward), 1000 ether);
+        rewardToken2.approve(address(reward), 1000 ether);
+        reward.distributeReward(rewardTokens, lpTokens, rewardAmounts);
+
+        uint256 rewardPerTokenStored = reward.rewardPerTokenStored(address(rewardTokens[0]), address(collateral1));
+        console.log("rewardPerTokenStored", rewardPerTokenStored);
+        uint256 userReward = reward.earned(user1, address(rewardToken));
+        console.log("userReward", userReward);
+
+        vm.startPrank(user1);
+        reward.claimReward( address(rewardToken));
+        userReward = reward.earned(user1, address(rewardToken));
+        console.log("userReward", userReward);
+
+
 
         }
     }
