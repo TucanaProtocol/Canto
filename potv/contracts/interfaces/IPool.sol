@@ -9,7 +9,7 @@ interface IPool {
     function userBorrow(address) external view returns (uint256);
     function totalBorrow() external view returns (uint256);
     
-    function userSupply(address, address) external view returns (uint256);
+
     function totalSupply(address) external view returns (uint256);
 
     function increasePoolToken(address user,address tokenAddress, uint256 amount) external;
@@ -17,7 +17,7 @@ interface IPool {
     function liquidateTokens(address src, address dest) external;
     function borrowUSD(address user, uint256 amount) external;
     function repayUSD(address repayer, address repaidUser, uint256 amount) external;
-    
+
     function getUserTokenSupply(address user, address tokenType) external view returns (uint256);
     function getUserTotalBorrow(address user) external view returns (uint256);
     function getSystemTokenTotalSupply(address tokenType) external view returns (uint256);

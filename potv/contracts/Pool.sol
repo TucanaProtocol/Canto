@@ -8,22 +8,22 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "./interfaces/IConfig.sol";
 import "./interfaces/ITUCUSD.sol";
 import "./interfaces/IPool.sol";
-
+import "./interfaces/ILPRT.sol";
+import "./interfaces/IStakeModule.sol";
 contract Pool is Initializable, OwnableUpgradeable, IPool {
     using SafeERC20Upgradeable for IERC20Upgradeable;
 
     IConfig public config;
     ITUCUSD public usdToken;
     address public lendContract;
+    IStakeModule public stakeModule;
     
     mapping(address => uint256) public userBorrow;
     uint256 public totalBorrow;
 
 
-    
 
-
-    /// token address => user address => amount
+    /// lprt token address => user address => amount
     mapping(address => mapping(address => uint256)) public userSupply;
     mapping(address => uint256) public totalSupply;
 
@@ -41,9 +41,10 @@ contract Pool is Initializable, OwnableUpgradeable, IPool {
         _;
     }
 
-    function initialize(address _configAddress) public initializer {
+    function initialize(address _configAddress, address _stakeModuleAddress) public initializer {
         __Ownable_init();
         config = IConfig(_configAddress);
+        stakeModule = IStakeModule(_stakeModuleAddress);
     }
 
     function setUsdAddress(address _usdAddress) external onlyOwner {
@@ -55,34 +56,35 @@ contract Pool is Initializable, OwnableUpgradeable, IPool {
         lendContract = _lendContract;
     }
 
-    function increasePoolToken(address user,address tokenAddress, uint256 amount) external onlyLend {
-        require(config.isWhitelistToken(tokenAddress), "Pool: Not a whitelisted token");
-        userSupply[tokenAddress][user] += amount;
-        totalSupply[tokenAddress] += amount;
-
-        emit IncreaseToken(user, tokenAddress, amount);
+    function increasePoolToken(address user, address lprtAddress, uint256 amount) external onlyLend {
+        address lpToken = ILPRT(lprtAddress).underlyingAsset();
+        require(config.isWhitelistToken(lpToken), "Pool: Not a whitelisted token");
+        userSupply[lprtAddress][user] += amount;
+        totalSupply[lprtAddress] += amount;
+        
+        emit IncreaseToken(user, lprtAddress, amount);
     }
 
-    function decreasePoolToken(address user, address receiver, address tokenAddress, uint256 amount) external onlyLend {
-        require(userSupply[tokenAddress][user] >= amount, "Pool: Insufficient balance");
+    function decreasePoolToken(address user, address receiver, address lprtAddress, uint256 amount) external onlyLend {
+        _decreasePoolToken(user, receiver, lprtAddress, amount);
+    }
 
-        userSupply[tokenAddress][user] -= amount;
-        totalSupply[tokenAddress] -= amount;
-
-        IERC20Upgradeable(tokenAddress).safeTransfer(receiver, amount);
-
-        emit DecreaseToken(user, tokenAddress, amount);
+    function _decreasePoolToken(address user, address receiver, address lprtAddress, uint256 amount) internal {
+        require(userSupply[lprtAddress][user] >= amount, "Pool: Insufficient balance");
+        userSupply[lprtAddress][user] -= amount;
+        totalSupply[lprtAddress] -= amount;
+        IERC20Upgradeable(lprtAddress).safeTransfer(receiver, amount);
     }
 
     function liquidateTokens(address src, address dest) external onlyLend {
-        address[] memory whitelistTokens = config.getAllWhitelistTokens();
-        for (uint i = 0; i < whitelistTokens.length; i++) {
-            address tokenAddress = whitelistTokens[i];
-            uint256 srcBalance = userSupply[tokenAddress][src];
+        address[] memory whitelistLPTokens = config.getAllWhitelistTokens();
+        for (uint i = 0; i < whitelistLPTokens.length; i++) {
+            address lpAddress = whitelistLPTokens[i];
+            address lprtAddress = stakeModule.lpTokenToLPRT(lpAddress);
+            uint256 srcBalance = userSupply[lprtAddress][src];
             if (srcBalance > 0) {
-                userSupply[tokenAddress][src] = 0;
-                userSupply[tokenAddress][dest] += srcBalance;
-                emit LiquidateToken(dest, src, tokenAddress, srcBalance);
+                _decreasePoolToken(src, dest, lprtAddress, srcBalance);
+                emit LiquidateToken(dest, src, lprtAddress, srcBalance);
             }
         }
     }

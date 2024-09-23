@@ -6,8 +6,11 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeab
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "./interfaces/IConfig.sol";
-import "./interfaces/IPool.sol";
+
 import "./interfaces/IReward.sol";
+import "./interfaces/ILPRT.sol";
+import "./interfaces/IStakeModule.sol";
+import "./interfaces/IStakePool.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 contract Reward is Initializable, OwnableUpgradeable, IReward {
@@ -16,40 +19,54 @@ contract Reward is Initializable, OwnableUpgradeable, IReward {
 
     EnumerableSet.AddressSet private rewardTokens;
     //rewardToken => lpToken => amount
-    mapping(address => mapping(address => uint256)) private rewardPerTokenStored;
+    mapping(address => mapping(address => uint256)) public rewardPerTokenStored;
     //user => rewardToken => lpToken => amount
     mapping(address => mapping(address => mapping(address => uint256))) private userRewardPerTokenPaid;
 
     //user => rewardToken => amount
     mapping(address => mapping(address => uint256)) private rewards;
     IConfig public config;
-    IPool public pool;
-    address public lendAddress;
-
+    IStakePool public stakePool;
+    IStakeModule public stakeModule;
     /// @notice Modifier to restrict function access to only the lend contract
     /// @dev Reverts if the caller is not the lend contract
-    modifier onlyLend() {
-        require(msg.sender == lendAddress, "Reward: Only lend contract can call this function");
+    modifier onlyStakeModule() {
+        require(msg.sender == address(stakeModule), "Reward: Only stake module can call this function");
         _;
     }
 
     /// @notice Initializes the contract with configuration and pool addresses
     /// @param _configAddress Address of the config contract
-    /// @param _poolAddress Address of the pool contract
+    /// @param _stakePoolAddress Address of the stake pool contract
     /// @dev This function can only be called once due to the initializer modifier
-    function initialize(address _configAddress, address _poolAddress) public initializer {
+    function initialize(address _configAddress, address _stakePoolAddress, address _stakeModuleAddress) public initializer {
         __Ownable_init();
         config = IConfig(_configAddress);
-        pool = IPool(_poolAddress);
+        stakePool = IStakePool(_stakePoolAddress);
+        stakeModule = IStakeModule(_stakeModuleAddress);
     }
     
-    /// @notice Sets the lend contract address
-    /// @param _lendAddress Address of the lend contract
-    /// @dev Can only be called by the contract owner
-    function setLendContract(address _lendAddress) external onlyOwner {
-        lendAddress = _lendAddress;
+
+    function setStakeModule(address _stakeModuleAddress) external onlyOwner {
+        stakeModule = IStakeModule(_stakeModuleAddress);
     }
 
+
+    function handleAction(address user,  uint256 userBalance) external  {
+        require(stakeModule.containsLPRT(msg.sender), "Reward: Only LPRT tokens can call this function");
+        _updateData(msg.sender, user, userBalance);
+    }
+
+    function _updateData(address asset, address user, uint256 userBalance) internal {
+        address lpToken = ILPRT(asset).underlyingAsset();
+        require(config.isWhitelistToken(lpToken), "Reward: LP token is not whitelisted");
+        for (uint256 i = 0; i < rewardTokens.length(); i++) {
+            address rewardToken = rewardTokens.at(i);
+            uint256 earnedAmount = earned(user, rewardToken);
+            rewards[user][rewardToken] += earnedAmount;
+            updateUserRewardPerTokenPaid(user, rewardToken, lpToken);
+        }
+    }
     /// @notice Updates the reward for a specific user
     /// @param user Address of the user to update rewards for
     /// @dev Calculates and stores earned rewards, updates user reward per token paid
@@ -76,7 +93,9 @@ contract Reward is Initializable, OwnableUpgradeable, IReward {
         address[] memory lpTokens = config.getAllWhitelistTokens();
         for (uint256 i = 0; i < lpTokens.length; i++) {
             address lpToken = lpTokens[i];
-            uint256 userTokenSupply = pool.getUserTokenSupply(user, lpToken);
+            address lprtToken = stakeModule.lpTokenToLPRT(lpToken);
+            if(lprtToken == address(0)) continue;
+            uint256 userTokenSupply = IERC20Upgradeable(lprtToken).balanceOf(user);
             uint256 rewardPerToken = getRewardPerTokenStored(rewardToken, lpToken);
             uint256 userRewardPaid = getUserRewardPaid(user, rewardToken, lpToken);
             totalEarned += (userTokenSupply * (rewardPerToken - userRewardPaid)) / (10**config.getPrecision());
@@ -125,7 +144,7 @@ contract Reward is Initializable, OwnableUpgradeable, IReward {
             for (uint256 j = 0; j < _lpTokens.length; j++) {
                 uint256 rewardAmount = _rewardAmounts[i][j];
                 address lpToken = _lpTokens[j];
-                uint256 totalTokenSupply = pool.totalSupply(lpToken);
+                uint256 totalTokenSupply = stakePool.stakeAmount(lpToken);
                 if (totalTokenSupply == 0) continue;
 
                 uint256 perTokenRewardIncrease = (rewardAmount * (10**config.getPrecision())) / totalTokenSupply;

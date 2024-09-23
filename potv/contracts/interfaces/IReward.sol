@@ -4,7 +4,7 @@ pragma solidity ^0.8.19;
 interface IReward {
     event RewardDistributed(address indexed rewardToken, address indexed lpToken, uint256 perTokenRewardIncrease);
     event RewardClaimed(address indexed user, address indexed rewardToken, uint256 amount);
-
+    function handleAction(address user, uint256 userBalance) external;
     function updateReward(address user) external;
     function earned(address user, address rewardToken) external view returns (uint256);
     function claimReward(address rewardToken) external;
