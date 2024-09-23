@@ -77,7 +77,7 @@ contract LPRTTest is Test {
         reward.initialize(address(config), address(stakePool), address(stakeModule));
         
         lend = new Lend();
-        lend.initialize(address(chainContract), address(pool), address(config), address(reward), address(priceFeed), address(usd));
+        lend.initialize(address(pool), address(config), address(reward), address(priceFeed), address(usd), address(stakeModule));
 
         pool.setLendContract(address(lend));
         chainContract.setStakeModule(address(stakeModule));
@@ -163,7 +163,26 @@ contract LPRTTest is Test {
         userReward = reward.earned(user1, address(rewardToken));
         console.log("userReward", userReward);
 
+        }
 
 
+        function test_lend() public {
+        vm.startPrank(user1);
+        collateral1.approve(address(stakeModule), 1 ether);
+        stakeModule.stake(address(collateral1), validators[0], 1 ether);
+
+
+        address lprtToken = stakeModule.lpTokenToLPRT(address(collateral1));
+       
+
+
+        //supply
+        IERC20(lprtToken).approve(address(lend), 1 ether);
+        lend.supply(lprtToken, 1 ether);
+         uint256 userLprtBalance = IERC20(lprtToken).balanceOf(user1);
+         assertEq(userLprtBalance, 0);
+
+
+            
         }
     }
