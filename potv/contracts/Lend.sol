@@ -7,6 +7,8 @@ import "./interfaces/IConfig.sol";
 import "./interfaces/IReward.sol";
 import "./interfaces/IPriceFeed.sol";
 import "./interfaces/ILend.sol";
+import "./interfaces/IStakeModule.sol";
+import "./interfaces/ILPRT.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
@@ -16,28 +18,24 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 contract Lend is Initializable, OwnableUpgradeable, PausableUpgradeable, ILend {
     using SafeERC20 for IERC20;
-    IChain public chain;
+
     IPool public pool;
     IConfig public config;
     IReward public reward;
     IPriceFeed public priceFeed;
     IERC20Metadata public usd;
-    mapping(address => bool) public plugin;
+    IStakeModule public stakeModule;
 
-    event IncreaseSupplyEvent(address indexed account, address indexed tokenType, uint256 amount, address indexed validator);
+
+    event IncreaseSupplyEvent(address indexed account, address indexed lprtAddress, uint256 amount);
     event IncreaseBorrowEvent(address indexed account, uint256 amount);
-    event DecreaseSupplyEvent(address indexed account, address indexed tokenType, uint256 amount, address indexed validator);
+    event DecreaseSupplyEvent(address indexed account, address indexed lprtAddress, uint256 amount);
     event RepayEvent(address indexed account, uint256 amount);
     event LiquidateEvent(address indexed liquidator, address indexed liquidatedUser, uint256 repayAmount);
 
 
-    modifier onlyPlugin() {
-        require(plugin[msg.sender], "Lend: Only plugin can call this function");
-        _;
-    }
     /**
      * @dev Initializes the contrpluginSupplyact with the given addresses.
-     * @param _chainAddress The address of the Chain contract.
      * @param _poolAddress The address of the Pool contract.
      * @param _configAddress The address of the Config contract.
      * @param _rewardAddress The address of the Reward contract.
@@ -45,85 +43,32 @@ contract Lend is Initializable, OwnableUpgradeable, PausableUpgradeable, ILend {
      * @param _usdAddress The address of the USD token contract.
      */
     function initialize(
-        address _chainAddress,
         address _poolAddress,
         address _configAddress,
         address _rewardAddress,
         address _priceFeedAddress,
-        address _usdAddress
+        address _usdAddress,
+        address _stakeModuleAddress
     ) public initializer {
         __Ownable_init();
         __Pausable_init();
-        chain = IChain(_chainAddress);
         pool = IPool(_poolAddress);
         config = IConfig(_configAddress);
         reward = IReward(_rewardAddress);
         priceFeed = IPriceFeed(_priceFeedAddress);
         usd = IERC20Metadata(_usdAddress);
-    }
-    
-    function setPlugin(address _plugin, bool _isPlugin) external onlyOwner {
-        plugin[_plugin] = _isPlugin;
+        stakeModule = IStakeModule(_stakeModuleAddress);
+
     }
 
-    function pluginSupply(address user, address tokenType, uint256 amount, address validator) external whenNotPaused onlyPlugin {
-        _supply(user, tokenType, amount, validator);
+   
+    function supply(address lprtAddress, uint256 amount) external whenNotPaused {
+        _supply(msg.sender, lprtAddress, amount);
     }
-
-
-    function pluginWithdraw(address user, address tokenType, uint256 amount, address validator) external whenNotPaused onlyPlugin {
-        _withdraw(user, msg.sender, tokenType, amount, validator);
-    }
-
-
-    /**
-     * @dev Supplies tokens to the pool and stakes them with a validator.
-     * @param tokenType The address of the token to supply.
-     * @param amount The amount of tokens to supply.
-     * @param validator The address of the validator to stake with.
-     *
-     * This function performs the following steps:
-     * 1. Updates the reward for the caller using the Reward contract.
-     * 2. Checks if the token type is whitelisted in the Config contract.
-     * 3. Transfers the specified amount of tokens from the caller to the Pool contract.
-     * 4. Calls the internal _increaseAndStake function, which:
-     *    - Calls Pool.increasePoolToken to increase the user's supply in the pool.
-     *    - Calls ChainContract.stakeToken to stake the tokens with the specified validator.
-     * 5. Emits an IncreaseSupplyEvent to log the supply action.
-     *
-     * This function interacts with:
-     * - Reward.sol: Updates the user's reward.
-     * - Config.sol: Checks if the token is whitelisted.
-     * - Pool.sol: Increases the user's token supply in the pool.
-     * - ChainContract.sol: Stakes the tokens with the specified validator.
-     */
-    function supply(address tokenType, uint256 amount, address validator) external whenNotPaused {
-        _supply(msg.sender, tokenType, amount, validator);
-    }
-    
-
   
-    /**
-     * @dev Withdraws tokens from the pool and unstakes them from a validator.
-     * @param tokenType The address of the token to withdraw.
-     * @param amount The amount of tokens to withdraw.
-     * @param validator The address of the validator to unstake from.
-     *
-     * This function performs the following steps:
-     * 1. Updates the reward for the caller using the Reward contract.
-     * 2. Calculates the maximum withdrawable amount for the user and token type.
-     * 3. Ensures the requested amount doesn't exceed the maximum withdrawable amount.
-     * 4. Calls the internal _decreaseAndUnstake function, which:
-     *    - Calls Pool.decreasePoolToken to reduce the user's supply in the pool.
-     *    - Calls ChainContract.unstakeToken to unstake the tokens from the validator.
-     * 5. Emits a DecreaseSupplyEvent to log the withdrawal.
-     *
-     *  This function interacts with:
-     * - Pool.sol: Decreases the user's token supply in the pool.
-     * - ChainContract.sol: Unstakes the tokens from the specified validator.
-     */
-    function withdraw(address tokenType, uint256 amount, address validator) external whenNotPaused {
-        _withdraw(msg.sender, msg.sender, tokenType, amount, validator);
+   
+    function withdraw(address lprtAddress, uint256 amount) external whenNotPaused {
+        _withdraw(msg.sender, msg.sender, lprtAddress, amount);
     }
     
     /**
@@ -144,6 +89,7 @@ contract Lend is Initializable, OwnableUpgradeable, PausableUpgradeable, ILend {
     function borrow(uint256 amount) external whenNotPaused {
         _borrow(msg.sender, amount);
     }
+
     /**
      * @dev Repays borrowed USD tokens to the pool.
      * @param amount The amount of USD tokens to repay.
@@ -198,56 +144,23 @@ contract Lend is Initializable, OwnableUpgradeable, PausableUpgradeable, ILend {
         emit LiquidateEvent(msg.sender, liquidatedUser, repayAmount);
     }
 
-    /**
-     * @dev Migrates staked tokens from a deleted validator to a new validator.
-     * 
-     * This function performs the following steps:
-     * 1. Checks if the deleted validator is a valid validator.
-     * 2. Gets the migrate stake limit from the ChainContract.
-     * 3. Retrieves the staked users for the deleted validator.
-     * 4. Determines the number of users to migrate based on the migrate stake limit.
-     * 5. Updates the rewards for the users being migrated.
-     * 6. Calls the migrateStakes function in the ChainContract to perform the actual migration.
-     *
-     * The migrateStakes function in the ChainContract does the following:
-     * 1. Adds the new validator to the list of validators if it's not already present.
-     * 2. If the deleteAmount is 0, removes the deleted validator from the list of validators.
-     * 3. For each user being migrated (up to the deleteAmount):
-     *    - For each whitelisted token:
-     *      - Transfers the user's stake from the deleted validator to the new validator.
-     *      - Updates the total stake for the deleted and new validators.
-     *    - Removes the user from the deleted validator's staked users list.
-     *    - Adds the user to the new validator's staked users list.
-     * 4. If the deleted validator has no more staked users, removes it from the list of validators.
-     *
-     * The migrateStakeLimit is used to prevent the case where a validator has too many staked users.
-     * In such cases, this function may need to be called multiple times to migrate all the users.
-     *
-     * @param deletedValidator The address of the deleted validator.
-     * @param newValidator The address of the new validator.
-     **/
-    function migrateStakes(address deletedValidator, address newValidator) external onlyOwner whenNotPaused {
-        require(chain.containsValidator(deletedValidator), "Lend: Invalid validator");
-
-        chain.migrateStakes(deletedValidator, newValidator);
-    }
 
     /**
-     * @dev Calculates the maximum amount of a token that a user can withdraw.
+     * @dev Calculates the maximum amount of a lprt token that a user can withdraw.
      * @param user The address of the user.
-     * @param tokenType The address of the token.
+     * @param lprtAddress The address of the token.
      * @return The maximum amount of the token that the user can withdraw.
      */
-    function getTokenMaxWithdrawable(address user, address tokenType) public view returns (uint256) {
+    function getTokenMaxWithdrawable(address user, address lprtAddress) public view returns (uint256) {
         uint256 borrowUSD = getUserBorrowTotalUSD(user);
         uint256 mcr = config.getMCR();
         uint256 precisionDecimals = config.getPrecision();
         uint256 precision = 10 ** precisionDecimals;
         uint256 minCollateralUSDValue = mcr * borrowUSD / precision;
-        uint256 tokenPrice = getTokenPrice(tokenType);
-        uint256 tokenDecimals = config.getTokenDecimals(tokenType);                            
+        uint256 tokenPrice = getTokenPrice(lprtAddress);
+        uint256 tokenDecimals = config.getTokenDecimals(lprtAddress);                            
         uint256 minCollateralAmount = minCollateralUSDValue * 10 ** tokenDecimals / tokenPrice;
-        uint256 userSupplyAmount = pool.getUserTokenSupply(user, tokenType);
+        uint256 userSupplyAmount = pool.getUserTokenSupply(user, lprtAddress);
         if (minCollateralAmount > userSupplyAmount) {
             return 0;
         }
@@ -298,10 +211,11 @@ contract Lend is Initializable, OwnableUpgradeable, PausableUpgradeable, ILend {
         address[] memory whitelistTokens = config.getAllWhitelistTokens();
         uint256 usdValue = 0;
         for (uint256 i = 0; i < whitelistTokens.length; i++) {
-            address tokenAddress = whitelistTokens[i];
-            uint256 userTokenSupply = pool.getUserTokenSupply(user, tokenAddress);
-            uint256 price = getTokenPrice(tokenAddress);
-            uint256 tokenDecimals = config.getTokenDecimals(tokenAddress);            
+            address lpTokenAddress = whitelistTokens[i];
+            address lprtAddress = stakeModule.lpTokenToLPRT(lpTokenAddress);
+            uint256 userTokenSupply = pool.getUserTokenSupply(user, lprtAddress);
+            uint256 price = getTokenPrice(lpTokenAddress);
+            uint256 tokenDecimals = config.getTokenDecimals(lprtAddress);            
             usdValue += userTokenSupply * price / (10 ** tokenDecimals);
         }
         return usdValue;
@@ -321,12 +235,12 @@ contract Lend is Initializable, OwnableUpgradeable, PausableUpgradeable, ILend {
     }
 
     /**
-     * @dev Gets the price of a token in USD.
-     * @param tokenType The address of the token.
+     * @dev Gets the price of a lp token in USD.
+     * @param lpAddress The address of the token.
      * @return The price of the token in USD.
      */
-    function getTokenPrice(address tokenType) public view returns (uint256) {
-        uint256 price = priceFeed.latestAnswer(tokenType);
+    function getTokenPrice(address lpAddress) public view returns (uint256) {
+        uint256 price = priceFeed.latestAnswer(lpAddress);
         uint256 decimals = priceFeed.getPriceDecimals();
         uint256 systemDecimals = config.getPrecision();
         if (systemDecimals > decimals) {
@@ -337,20 +251,19 @@ contract Lend is Initializable, OwnableUpgradeable, PausableUpgradeable, ILend {
         return price;
     }
 
-    function _supply(address user, address tokenType, uint256 amount, address validator) internal {
-        reward.updateReward(user);
-        require(config.isWhitelistToken(tokenType), "Lend: Not whitelisted token");
-        IERC20(tokenType).safeTransferFrom(msg.sender, address(pool), amount);
-        _increaseAndStake(user, tokenType, amount, validator);
-        emit IncreaseSupplyEvent(user, tokenType, amount, validator);
+    function _supply(address user, address lprtAddress, uint256 amount) internal {
+        address lpToken = ILPRT(lprtAddress).underlyingAsset();
+        require(config.isWhitelistToken(lpToken), "Lend: Not whitelisted token");
+        IERC20(lprtAddress).safeTransferFrom(msg.sender, address(pool), amount);
+        _increaseAndStake(user, lprtAddress, amount);
+        emit IncreaseSupplyEvent(user, lprtAddress, amount);
     }
 
-    function _withdraw(address user, address receiver, address tokenType, uint256 amount, address validator) internal {
-        reward.updateReward(user);
-        uint256 maxWithdrawable = getTokenMaxWithdrawable(user, tokenType);
+    function _withdraw(address user, address receiver, address lprtAddress, uint256 amount) internal {
+        uint256 maxWithdrawable = getTokenMaxWithdrawable(user, lprtAddress);
         require(amount <= maxWithdrawable, "Lend: Exceed withdraw amount");
-        _decreaseAndUnstake(user, receiver, tokenType, amount, validator);
-        emit DecreaseSupplyEvent(user, tokenType, amount, validator);
+        _decreaseAndUnstake(user, receiver, lprtAddress, amount);
+        emit DecreaseSupplyEvent(user, lprtAddress, amount);
     }
 
 
@@ -370,26 +283,12 @@ contract Lend is Initializable, OwnableUpgradeable, PausableUpgradeable, ILend {
 
 
 
-    /**
-     * @dev Increases a user's token supply and stakes the tokens with a validator.
-     * @param user The address of the user.
-     * @param tokenType The address of the token.
-     * @param amount The amount of tokens to increase and stake.
-     * @param validator The address of the validator to stake with.
-     */
-    function _increaseAndStake(address user, address tokenType, uint256 amount, address validator) internal {
+    function _increaseAndStake(address user, address tokenType, uint256 amount) internal {
         pool.increasePoolToken(user, tokenType, amount);
     }
 
-    /**
-     * @dev Decreases a user's token supply and unstakes the tokens from a validator.
-     * @param user The address of the user.
-     * @param receiver The address of the receiver.
-     * @param tokenType The address of the token.
-     * @param amount The amount of tokens to decrease and unstake.
-     * @param validator The address of the validator to unstake from.
-     */
-    function _decreaseAndUnstake(address user, address receiver, address tokenType, uint256 amount, address validator) internal {
+  
+    function _decreaseAndUnstake(address user, address receiver, address tokenType, uint256 amount) internal {
         pool.decreasePoolToken(user, receiver, tokenType, amount);
     }
 }

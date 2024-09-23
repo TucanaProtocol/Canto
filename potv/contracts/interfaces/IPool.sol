@@ -17,8 +17,8 @@ interface IPool {
     function liquidateTokens(address src, address dest) external;
     function borrowUSD(address user, uint256 amount) external;
     function repayUSD(address repayer, address repaidUser, uint256 amount) external;
-    
 
+    function getUserTokenSupply(address user, address tokenType) external view returns (uint256);
     function getUserTotalBorrow(address user) external view returns (uint256);
     function getSystemTokenTotalSupply(address tokenType) external view returns (uint256);
     function getSystemTotalBorrowed() external view returns (uint256);
