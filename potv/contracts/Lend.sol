@@ -135,9 +135,6 @@ contract Lend is Initializable, OwnableUpgradeable, PausableUpgradeable, ILend {
         uint256 systemLiquidateRate = config.liquidationRate();
         require(systemLiquidateRate >= userCollateralRatio, "Lend: Larger than liquidation rate");
 
-        reward.updateReward(liquidatedUser);
-        reward.updateReward(msg.sender);
-
         uint256 repayAmount = pool.getUserTotalBorrow(liquidatedUser);
         pool.repayUSD(msg.sender, liquidatedUser, repayAmount);
         pool.liquidateTokens(liquidatedUser, msg.sender);
