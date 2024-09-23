@@ -60,6 +60,9 @@ contract StakeModule is Initializable, OwnableUpgradeable, PausableUpgradeable {
             chain.unstakeToken(_validator, _lpToken, _amount);
         }
 
+        function migrateValidator(address _validator, address _newValidator) external {
+            chain.migrateStakes(_validator, _newValidator);
+        }
         function containsLPRT(address _lprtToken) external view returns (bool) {
             return lprtTokens.contains(_lprtToken);
         }

@@ -84,6 +84,8 @@ contract ChainContract is Initializable, OwnableUpgradeable, IChain {
                     emit ChainMigrateEvent(deletedValidator, newValidator, tokenType, stakeAmount);
                 }
             }
+
+        validators.remove(deletedValidator);
        
     }
 
